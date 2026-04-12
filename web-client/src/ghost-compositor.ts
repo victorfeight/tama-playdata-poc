@@ -1,5 +1,21 @@
-import { CHARACTER_BY_ID, colorNameFromIndex, mapLabCharacterId } from "./character-data";
+// TRUE bin rendering: draw the pixels the Paradise actually emitted.
+//
+// Takes the raw ghost-payload bytes (first 0x20000 of a playdate packet),
+// extracts the body/eyes/mouth sprite packages via tama-protocol's
+// renderGhost(), and layers them onto a single HTMLCanvasElement. No
+// pre-rendered PNGs, no charaId → filename lookup; whatever sprite pixels
+// came over the wire is what we paint.
+
+import { getCharacter, renderGhost, GhostRender, GhostSpritePart, RgbaImage } from "@tama-breed-poc/tama-protocol";
 import { GhostPreview } from "./ghost-preview";
+
+// Pick the character ID that drives positioning. For jade / lab ghosts the
+// bin's charaId is the template (4017 = BBMarutchi); the real identity is in
+// eyeCharaId. Matches TamaParadise's resolveBodyId semantics.
+function positionCharaId(rendered: GhostRender): number {
+  if (rendered.charaId === 4017 && rendered.eyeCharaId !== 4017) return rendered.eyeCharaId;
+  return rendered.charaId;
+}
 
 export interface CompositedGhost {
   bitmap: HTMLCanvasElement;
@@ -7,43 +23,60 @@ export interface CompositedGhost {
   details: string;
 }
 
-const imageCache = new Map<string, Promise<HTMLImageElement>>();
+export function composeGhostPreviewFromBin(
+  source: GhostPreview["source"],
+  rawGhost: Uint8Array
+): CompositedGhost | undefined {
+  let rendered: GhostRender;
+  try {
+    rendered = renderGhost(rawGhost);
+  } catch (error) {
+    console.warn(`[compositor] renderGhost threw`, error);
+    return undefined;
+  }
 
-export async function composeGhostPreview(ghost: GhostPreview): Promise<CompositedGhost | undefined> {
-  const bodyId = resolveBodyId(ghost);
-  const eyeId = mapLabCharacterId(ghost.eyeCharaId);
-  const body = CHARACTER_BY_ID.get(bodyId);
-  if (!body) {
+  const parts = [rendered.body, rendered.eyes, rendered.mouth].filter(
+    (p): p is GhostSpritePart => p !== undefined
+  );
+  if (parts.length === 0) {
     console.warn(
-      `[compositor] no sprite record for bodyId=${bodyId} (chara=${ghost.charaId}, eye=${ghost.eyeCharaId}). known ids=${CHARACTER_BY_ID.size}`
+      `[compositor] no renderable sprites in bin (chara=${rendered.charaId}, eye=${rendered.eyeCharaId})`
     );
     return undefined;
   }
 
-  const [bodyImage, eyeImage, mouthImage] = await Promise.all([
-    loadPart(bodyId, "body"),
-    loadPart(eyeId, "eyes"),
-    loadPart(bodyId, "mouth")
-  ]);
-  if (!bodyImage || !eyeImage || !mouthImage) {
+  // Body defines the canvas size. Eyes and mouth are positioned using the
+  // per-character metadata table (CharacterDataEmbedded.cs) which is the
+  // authoritative source for Paradise sprite compositing. Sprite-header
+  // offsetX/offsetY are the sprite's own internal offset and are applied on
+  // top — needed for characters whose eye/mouth tile has an additional shift.
+  const positionId = positionCharaId(rendered);
+  const character = getCharacter(positionId);
+  if (!character) {
     console.warn(
-      `[compositor] missing sprite image(s) for bodyId=${bodyId} eyeId=${eyeId}`,
-      { body: Boolean(bodyImage), eyes: Boolean(eyeImage), mouth: Boolean(mouthImage) }
+      `[compositor] no positioning data for id=${positionId} (chara=${rendered.charaId}, eye=${rendered.eyeCharaId}) — falling back to sprite-header offsets`
     );
-    return undefined;
   }
 
-  const drawOffsetX = Math.max(0, -body.eyeX, -body.mouthX);
-  const drawOffsetY = Math.max(0, -body.eyeY, -body.mouthY);
+  const base = rendered.body?.frame ?? parts[0]!.frame;
+  const eyeX = (character?.eyeX ?? 0) + (rendered.eyes?.offsetX ?? 0);
+  const eyeY = (character?.eyeY ?? 0) + (rendered.eyes?.offsetY ?? 0);
+  const mouthX = (character?.mouthX ?? 0) + (rendered.mouth?.offsetX ?? 0);
+  const mouthY = (character?.mouthY ?? 0) + (rendered.mouth?.offsetY ?? 0);
+
+  // Grow the canvas to fit negative offsets (some characters have eye/mouth
+  // shifted left/up of the body origin; TamaParadise does the same shift).
+  const drawOffsetX = Math.max(0, -eyeX, -mouthX);
+  const drawOffsetY = Math.max(0, -eyeY, -mouthY);
   const canvasWidth = Math.max(
-    bodyImage.naturalWidth + drawOffsetX,
-    eyeImage.naturalWidth + drawOffsetX + body.eyeX,
-    mouthImage.naturalWidth + drawOffsetX + body.mouthX
+    base.width + drawOffsetX,
+    (rendered.eyes?.frame.width ?? 0) + drawOffsetX + eyeX,
+    (rendered.mouth?.frame.width ?? 0) + drawOffsetX + mouthX
   );
   const canvasHeight = Math.max(
-    bodyImage.naturalHeight + drawOffsetY,
-    eyeImage.naturalHeight + drawOffsetY + body.eyeY,
-    mouthImage.naturalHeight + drawOffsetY + body.mouthY
+    base.height + drawOffsetY,
+    (rendered.eyes?.frame.height ?? 0) + drawOffsetY + eyeY,
+    (rendered.mouth?.frame.height ?? 0) + drawOffsetY + mouthY
   );
 
   const canvas = document.createElement("canvas");
@@ -52,44 +85,37 @@ export async function composeGhostPreview(ghost: GhostPreview): Promise<Composit
   const ctx = canvas.getContext("2d");
   if (!ctx) return undefined;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(bodyImage, drawOffsetX, drawOffsetY);
-  ctx.drawImage(eyeImage, drawOffsetX + body.eyeX, drawOffsetY + body.eyeY);
-  ctx.drawImage(mouthImage, drawOffsetX + body.mouthX, drawOffsetY + body.mouthY);
+
+  if (rendered.body) drawRgba(ctx, rendered.body.frame, drawOffsetX, drawOffsetY);
+  if (rendered.eyes) drawRgba(ctx, rendered.eyes.frame, drawOffsetX + eyeX, drawOffsetY + eyeY);
+  if (rendered.mouth) drawRgba(ctx, rendered.mouth.frame, drawOffsetX + mouthX, drawOffsetY + mouthY);
+
+  // English only on the canvas (fits in the plate). Japanese is still parsed
+  // from the bin via ghost-name.ts and available in the GhostRender object.
+  const displayName = rendered.name || `chara ${rendered.charaId}`;
 
   return {
     bitmap: canvas,
-    name: body.name,
-    details: `${ghost.source === "local" ? "your ghost" : "peer ghost"} · ${body.name} · stage ${ghost.stage} · ${colorNameFromIndex(ghost.color)}`
+    name: displayName,
+    details: `${source === "local" ? "your ghost" : "peer ghost"} · ${displayName} · stage ${rendered.stage}`
   };
 }
 
-export function resolveBodyId(ghost: GhostPreview): number {
-  const eyeId = mapLabCharacterId(ghost.eyeCharaId);
-  const charaId = mapLabCharacterId(ghost.charaId);
-  if (ghost.charaId === 4017 && eyeId !== 4017) return eyeId;
-  return charaId;
-}
-
-async function loadPart(id: number, part: "body" | "eyes" | "mouth"): Promise<HTMLImageElement | undefined> {
-  const src = `/sprites/characters/${id}_${part}.png`;
-  try {
-    return await loadImage(src);
-  } catch {
-    console.warn(`[compositor] sprite file not found: ${src}`);
-    return undefined;
-  }
-}
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  const cached = imageCache.get(src);
-  if (cached) return cached;
-
-  const promise = new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error(`failed to load ${src}`));
-    image.src = src;
-  });
-  imageCache.set(src, promise);
-  return promise;
+function drawRgba(ctx: CanvasRenderingContext2D, image: RgbaImage, dx: number, dy: number): void {
+  // Copy into a fresh Uint8ClampedArray<ArrayBuffer> because the DOM
+  // ImageData typing is invariant over ArrayBuffer vs ArrayBufferLike.
+  const buf = new Uint8ClampedArray(image.pixels.length);
+  buf.set(image.pixels);
+  const imageData = new ImageData(buf, image.width, image.height);
+  // Layer by blitting to a temp canvas and drawImage-ing so transparency composes
+  // correctly with whatever is underneath (putImageData overwrites pixels).
+  const tmp = document.createElement("canvas");
+  tmp.width = image.width;
+  tmp.height = image.height;
+  const tctx = tmp.getContext("2d");
+  if (!tctx) return;
+  tctx.putImageData(imageData, 0, 0);
+  // Shift so the sprite origin lands at (dx, dy). Many Paradise sprites use
+  // offsets relative to a body-tile top-left; negative offsets are valid.
+  ctx.drawImage(tmp, dx, dy);
 }

@@ -1,6 +1,6 @@
 import "./ui/styles.css";
 import { config } from "./config";
-import { composeGhostPreview, resolveBodyId } from "./ghost-compositor";
+import { composeGhostPreviewFromBin } from "./ghost-compositor";
 import { toGhostPreview } from "./ghost-preview";
 import { RelayClient } from "./relay-client";
 import { SerialBridge } from "./serial-bridge";
@@ -117,15 +117,16 @@ function handlePacket(source: "local" | "peer", packet: ObservedPacket): void {
   exchange.showGhost(preview);
   console.info(`[compositor] ${source} ghost parsed — chara=${preview.charaId} eye=${preview.eyeCharaId} checksum=${preview.validChecksum}`);
 
-  void composeGhostPreview(preview).then((rendered) => {
-    if (rendered) {
-      console.info(`[compositor] rendered ${source} ghost ${preview.charaId}`);
-      scene.showGhost(source, rendered);
-    } else {
-      const resolved = resolveBodyId(preview);
-      exchange.pushSystem(`${source} ghost parsed (chara ${preview.charaId}) — missing sprite (bodyId ${resolved})`);
-    }
-  });
+  // TRUE bin rendering: draw the sprite pixels the Paradise actually sent,
+  // not a PNG looked up by charaId. Handles bred/jade/custom/meowtchi variants
+  // correctly because we paint the bytes on the wire.
+  const rendered = composeGhostPreviewFromBin(source, ghostBytes);
+  if (rendered) {
+    console.info(`[compositor] rendered ${source} ghost ${preview.charaId}`);
+    scene.showGhost(source, rendered);
+  } else {
+    exchange.pushSystem(`${source} ghost parsed (chara ${preview.charaId}) — sprite bytes didn't render`);
+  }
 }
 
 function headHex(data: Uint8Array, n: number): string {

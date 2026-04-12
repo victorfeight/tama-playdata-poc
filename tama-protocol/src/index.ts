@@ -1,3 +1,4 @@
+export * from "./character-data";
 export * from "./crc";
 export * from "./framing";
 export * from "./ghost";
