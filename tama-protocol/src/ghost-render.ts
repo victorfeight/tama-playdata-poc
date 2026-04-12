@@ -27,7 +27,7 @@ export interface GhostRender {
   eyeCharaId: number;
   color: number;
   stage: number;
-  gender: number;
+  charaFlags: import("./ghost").CharaFlags;
   validChecksum: boolean;
   body: GhostSpritePart | undefined;
   eyes: GhostSpritePart | undefined;
@@ -56,7 +56,7 @@ export function renderGhost(ghost: Uint8Array): GhostRender {
     eyeCharaId: parsed.eyeCharaId,
     color: parsed.color,
     stage: parsed.stage,
-    gender: parsed.gender,
+    charaFlags: parsed.charaFlags,
     validChecksum: parsed.validChecksum,
     body,
     eyes,

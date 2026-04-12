@@ -1,12 +1,12 @@
-import { ParsedGhost } from "@tama-breed-poc/tama-protocol";
+import { CharaFlags, ParsedGhost } from "@tama-breed-poc/tama-protocol";
 
 export interface GhostPreview {
   label: string;
   charaId: number;
   eyeCharaId: number;
   stage: number;
-  gender: number;
   color: number;
+  charaFlags: CharaFlags;
   validChecksum: boolean;
   source: "local" | "peer";
 }
@@ -17,8 +17,8 @@ export function toGhostPreview(source: "local" | "peer", ghost: ParsedGhost): Gh
     charaId: ghost.charaId,
     eyeCharaId: ghost.eyeCharaId,
     stage: ghost.stage,
-    gender: ghost.gender,
     color: ghost.color,
+    charaFlags: ghost.charaFlags,
     validChecksum: ghost.validChecksum,
     source
   };

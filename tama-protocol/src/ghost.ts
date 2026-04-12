@@ -18,12 +18,30 @@ export interface GhostHeader {
   color: number;
   stage: number;
   speciesRank: number;
-  fieldType: number;
-  gender: number;
+  charaFlags: CharaFlags;
   totalLength: number;
   spriteLocations: SpriteEntry[][];
   bodyPalette: number[];
   mouthPalette: number[];
+}
+
+// chara_flags_t at offset 0x100 in ghost_data_t (per ghost spec §Ghost data).
+// Stored as a u32 but only the low 3 bits are meaningful; keep raw for future
+// bits, expose the known booleans as decoded shorthand.
+export interface CharaFlags {
+  raw: number;
+  isConsumer: boolean;    // bit 0 — may eat other tamas in playdate
+  isConsumee: boolean;    // bit 1 — may be eaten in playdate
+  isUnbreedable: boolean; // bit 2 — cannot be bred with (only BBMarutchi)
+}
+
+export function parseCharaFlags(raw: number): CharaFlags {
+  return {
+    raw,
+    isConsumer: (raw & 0x1) !== 0,
+    isConsumee: (raw & 0x2) !== 0,
+    isUnbreedable: (raw & 0x4) !== 0
+  };
 }
 
 export interface ParsedGhost extends GhostHeader {
@@ -86,8 +104,7 @@ export function parseGhost(data: Uint8Array): ParsedGhost {
     color,
     stage: u16(view, 0xfc),
     speciesRank: u16(view, 0xfe),
-    fieldType: u16(view, 0x100),
-    gender: u16(view, 0x102),
+    charaFlags: parseCharaFlags(u32(view, 0x100)),
     totalLength: u32(view, 0x10c),
     spriteLocations,
     bodyPalette,

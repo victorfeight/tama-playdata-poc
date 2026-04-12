@@ -7,6 +7,7 @@ export * from "./ghost-render";
 export * from "./packets";
 export * from "./paradise-chars";
 export * from "./play-data";
+export * from "./play-prediction";
 export * from "./playdate-flow";
 export * from "./sprite-parser";
 export * from "./tcp-crypto";

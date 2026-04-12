@@ -26,7 +26,12 @@ export class ExchangeScreen {
   // they arrive, instead of the later one clobbering the earlier one.
   showGhost(ghost: GhostPreview): void {
     const checksum = ghost.validChecksum ? "checksum ok" : "checksum changed";
-    const line = `${ghost.label}: chara ${ghost.charaId}, eye ${ghost.eyeCharaId}, stage ${ghost.stage}, gender ${ghost.gender}, color ${ghost.color}. ${checksum}.`;
+    const flags: string[] = [];
+    if (ghost.charaFlags.isConsumer) flags.push("consumer");
+    if (ghost.charaFlags.isConsumee) flags.push("consumee");
+    if (ghost.charaFlags.isUnbreedable) flags.push("unbreedable");
+    const flagText = flags.length ? `, ${flags.join("+")}` : "";
+    const line = `${ghost.label}: chara ${ghost.charaId}, eye ${ghost.eyeCharaId}, stage ${ghost.stage}, color ${ghost.color}${flagText}. ${checksum}.`;
     this.ghostLines.set(ghost.source, line);
     this.renderGhostElement();
   }
