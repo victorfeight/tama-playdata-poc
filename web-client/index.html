@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Paradise Link POC</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="device">
+        <canvas id="link-canvas" width="800" height="520" aria-label="Paradise Link status scene"></canvas>
+        <div class="panel">
+          <p class="eyebrow">Paradise Link</p>
+          <h1>Pair two devices through a room code.</h1>
+          <div class="controls">
+            <button id="connect-serial" type="button">Connect Dongle</button>
+            <button id="create-room" type="button">Create Room</button>
+            <label>
+              Room code
+              <input id="room-code" maxlength="6" autocomplete="off" spellcheck="false" />
+            </label>
+            <button id="join-room" type="button">Join Room</button>
+            <button id="cancel" type="button" hidden>Cancel</button>
+          </div>
+          <dl class="stats">
+            <div><dt>State</dt><dd id="state">idle</dd></div>
+            <div><dt>Port</dt><dd id="port">none</dd></div>
+            <div><dt>Room</dt><dd id="room">none</dd></div>
+            <div><dt>Bytes in</dt><dd id="bytes-in">0</dd></div>
+            <div><dt>Bytes out</dt><dd id="bytes-out">0</dd></div>
+          </dl>
+        </div>
+      </section>
+      <section class="exchange">
+        <div class="ghost-panel">
+          <p class="eyebrow">Live Exchange</p>
+          <h2>Raw link</h2>
+          <p id="ghost-summary">Native Paradise exchange is relayed unchanged.</p>
+        </div>
+        <pre id="byte-log" aria-label="Byte log"></pre>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

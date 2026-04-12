@@ -1,0 +1,4 @@
+packages:
+  - "tama-protocol"
+  - "relay-server"
+  - "web-client"

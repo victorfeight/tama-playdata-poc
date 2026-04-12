@@ -1,0 +1,18 @@
+{
+  "name": "@tama-breed-poc/web-client",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "@tama-breed-poc/tama-protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^5.4.11",
+    "typescript": "^5.7.3"
+  }
+}
