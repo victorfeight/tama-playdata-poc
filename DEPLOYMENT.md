@@ -594,6 +594,59 @@ should load. Two tabs · Create Room / Join Room → PAIRED → exchange.
 
 ## 17. Redeploy / push changes
 
+### Auth topology (reference)
+
+```
+Your laptop                  GitHub                    Droplet (/srv/playdate)
+───────────                  ──────                    ────────
+git push (HTTPS + PAT)  ────►  repo  ◄──── git pull (SSH, deploy key)
+                               │
+                               └─ deploy key (read-only, per-repo)
+ssh playdate (SSH key) ────────────────────────────►  ssh daemon
+```
+
+| Connection | Method | Credential |
+|---|---|---|
+| Your laptop → droplet SSH | SSH | `~/.ssh/playdate_droplet` (private) |
+| Droplet → GitHub (pulls) | SSH | `~/.ssh/github_deploy` on droplet, public added as the repo's **deploy key** |
+| Your laptop → GitHub (push) | HTTPS | Classic **PAT** with `repo` scope |
+
+You don't need any more SSH setup. Droplet-side SSH is permanent;
+GitHub-write from your laptop is PAT only.
+
+### Stash the PAT so `git push` is silent
+
+```bash
+git config --global credential.helper store
+```
+
+Next `git push` prompts you once:
+
+```
+Username for 'https://github.com': victorfeight
+Password for 'https://victorfeight@github.com': <paste PAT>
+```
+
+Git writes `~/.git-credentials` (plaintext; on your own machine this is fine
+for a `repo`-scope PAT). After that, every `git push` is silent.
+
+More secure alternative (Gnome Keyring-backed on Debian):
+
+```bash
+sudo apt install -y libsecret-1-0 libsecret-1-dev
+sudo make -C /usr/share/doc/git/contrib/credential/libsecret
+git config --global credential.helper \
+  /usr/share/doc/git/contrib/credential/libsecret/git-credential-libsecret
+```
+
+### PAT hygiene
+
+- Any PAT that touches a chat window, Slack, email, screenshot, or anything
+  that stores to disk outside your password manager → **revoke and rotate**.
+  GitHub → avatar → **Settings → Developer settings → Personal access tokens →
+  Tokens (classic)** → Delete the old one, Generate new one (`repo` scope,
+  90-day expiry), update `~/.git-credentials` (or the next push will reprompt).
+
 ### Git-pull workflow (current, preferred)
 
 `/srv/playdate` is a git checkout of **github.com/victorfeight/tama-playdata-poc**,
