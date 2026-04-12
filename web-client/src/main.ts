@@ -1,6 +1,6 @@
 import "./ui/styles.css";
 import { config } from "./config";
-import { composeGhostPreview } from "./ghost-compositor";
+import { composeGhostPreview, resolveBodyId } from "./ghost-compositor";
 import { toGhostPreview } from "./ghost-preview";
 import { RelayClient } from "./relay-client";
 import { SerialBridge } from "./serial-bridge";
@@ -12,15 +12,15 @@ import { Scene } from "./ui/scene";
 import { connectDongle, hasWebSerial } from "./utils/webserial";
 import {
   GHOST_HEADER_USED_LENGTH,
+  GHOST_SIZE,
+  ObservedPacket,
   parseGhost,
   TcpObserver,
   WebSerialTransport
 } from "@tama-breed-poc/tama-protocol";
 
 // Simple lifecycle: attach the bridge the moment both a dongle and a socket
-// are open. If the peer hasn't joined yet the relay will drop our outgoing
-// bytes (Paradise retransmits, so that's fine). This matches the original
-// behavior that worked first-try before the paired-signal gate was added.
+// are open. Re-clicking Create/Join automatically drops any existing socket.
 
 const state = new StateMachine();
 let serial: WebSerialTransport | undefined;
@@ -35,23 +35,68 @@ scene.mount();
 const exchange = new ExchangeScreen(must("byte-log"), must("ghost-summary"));
 new LinkScreen(state).bindState(must("state"));
 
-const outObserver = new TcpObserver({ packet: (p) => handlePacket("local", p) });
-const inObserver = new TcpObserver({ packet: (p) => handlePacket("peer", p) });
+const outObserver = makeObserver("local", "out");
+const inObserver = makeObserver("peer", "in");
 
-function handlePacket(source: "local" | "peer", packet: { msgType: number; payload: Uint8Array }): void {
-  if (packet.msgType !== 1) return;
-  if (packet.payload.length < GHOST_HEADER_USED_LENGTH) return;
-  let parsed;
-  try {
-    parsed = parseGhost(packet.payload);
-  } catch {
+function makeObserver(source: "local" | "peer", label: "out" | "in"): TcpObserver {
+  return new TcpObserver({
+    packet: (p) => handlePacket(source, p),
+    command: (line) => {
+      console.debug(`[obs ${label}] command`, line);
+      exchange.pushSystem(`obs ${label}: ${line}`);
+    },
+    resync: (reason, total) => {
+      console.warn(`[obs ${label}] resync #${total}`, reason);
+      exchange.pushSystem(`obs ${label} resync #${total}: ${reason}`);
+    }
+  });
+}
+
+function handlePacket(source: "local" | "peer", packet: ObservedPacket): void {
+  console.debug(`[obs ${source}] packet msgType=${packet.msgType} len=${packet.payload.length}`);
+  exchange.pushSystem(`packet ${source}: type ${packet.msgType}, ${packet.payload.length} bytes`);
+
+  if (packet.msgType !== 1) {
+    console.debug(`[obs ${source}] ignored non-playdate packet (msgType=${packet.msgType})`);
     return;
   }
+  if (packet.payload.length < GHOST_HEADER_USED_LENGTH) {
+    console.warn(`[obs ${source}] packet too short for a ghost header: ${packet.payload.length}`);
+    exchange.pushSystem(`${source}: packet too short to be a ghost (${packet.payload.length} bytes)`);
+    return;
+  }
+
+  // A live playdate packet is ghost(131072) + play_data(20) = 131092 bytes.
+  // Match GhostCapture/GhostCaptureService.cs which truncates to GHOST_SIZE
+  // before parsing. The trailing play_data is protocol state we ignore here.
+  const ghostBytes = packet.payload.length > GHOST_SIZE ? packet.payload.slice(0, GHOST_SIZE) : packet.payload;
+
+  let parsed;
+  try {
+    parsed = parseGhost(ghostBytes);
+  } catch (error) {
+    console.warn(`[obs ${source}] parseGhost threw`, error, headHex(ghostBytes, 64));
+    exchange.pushSystem(`${source}: parseGhost failed — ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+
   const preview = toGhostPreview(source, parsed);
   exchange.showGhost(preview);
+  console.info(`[compositor] ${source} ghost parsed — chara=${preview.charaId} eye=${preview.eyeCharaId} checksum=${preview.validChecksum}`);
+
   void composeGhostPreview(preview).then((rendered) => {
-    if (rendered) scene.showGhost(source, rendered);
+    if (rendered) {
+      console.info(`[compositor] rendered ${source} ghost ${preview.charaId}`);
+      scene.showGhost(source, rendered);
+    } else {
+      const resolved = resolveBodyId(preview);
+      exchange.pushSystem(`${source} ghost parsed (chara ${preview.charaId}) — missing sprite (bodyId ${resolved})`);
+    }
   });
+}
+
+function headHex(data: Uint8Array, n: number): string {
+  return [...data.slice(0, n)].map((b) => b.toString(16).padStart(2, "0")).join(" ");
 }
 
 const portEl = must("port");
@@ -59,10 +104,7 @@ const roomEl = must("room");
 const bytesInEl = must("bytes-in");
 const bytesOutEl = must("bytes-out");
 const codeInput = must<HTMLInputElement>("room-code");
-const cancelButton = must<HTMLButtonElement>("cancel");
 const relay = new RelayClient({ baseUrl: config.relayUrl, secret: config.relaySecret });
-
-refreshControls();
 
 must<HTMLButtonElement>("connect-serial").addEventListener("click", async () => {
   if (serialOpenPending) return;
@@ -81,52 +123,48 @@ must<HTMLButtonElement>("connect-serial").addEventListener("click", async () => 
     showAppError(error);
   } finally {
     serialOpenPending = false;
-    refreshControls();
   }
 });
 
 must<HTMLButtonElement>("create-room").addEventListener("click", async () => {
   try {
+    await dropExistingSocket();
     const code = await relay.createRoom();
     codeInput.value = code;
     roomEl.textContent = code;
     await connectWs(code, "a");
   } catch (error) {
     showAppError(error);
-  } finally {
-    refreshControls();
   }
 });
 
 must<HTMLButtonElement>("join-room").addEventListener("click", async () => {
   const code = codeInput.value.trim().toUpperCase();
   if (!code) return;
-  roomEl.textContent = code;
   try {
+    await dropExistingSocket();
+    roomEl.textContent = code;
     await connectWs(code, "b");
   } catch (error) {
     showAppError(error);
-  } finally {
-    refreshControls();
   }
 });
 
-cancelButton.addEventListener("click", () => {
-  void cancelRoom("Exchange cancelled. Dongle still connected.");
-});
+async function dropExistingSocket(): Promise<void> {
+  if (!socket || socket.readyState >= WebSocket.CLOSING) return;
+  const done = new Promise<void>((resolve) => {
+    socket!.addEventListener("close", () => resolve(), { once: true });
+  });
+  socket.close();
+  await done;
+}
 
 async function connectWs(code: string, role: "a" | "b"): Promise<void> {
-  if (socket && socket.readyState < WebSocket.CLOSING) {
-    showAppMessage("Room is already connected.");
-    return;
-  }
-
   socket = relay.connect(code, role);
   socket.addEventListener("open", () => {
     state.set("WS_OPEN");
     showAppMessage("Room open.");
     tryAttachBridge();
-    refreshControls();
   });
   socket.addEventListener("close", () => {
     closeBridge();
@@ -137,7 +175,6 @@ async function connectWs(code: string, role: "a" | "b"): Promise<void> {
     bytesInEl.textContent = "0";
     bytesOutEl.textContent = "0";
     state.set(serial ? "SERIAL_OPEN" : "IDLE");
-    refreshControls();
   });
 }
 
@@ -162,7 +199,6 @@ function attachBridge(): void {
   bridge.start();
   state.set("EXCHANGING");
   showAppMessage("Exchange live. Enter Friend menu on the device.");
-  refreshControls();
 }
 
 function tryAttachBridge(): void {
@@ -174,32 +210,12 @@ function closeBridge(): void {
   bridge = undefined;
 }
 
-async function cancelRoom(message: string): Promise<void> {
-  socket?.close();
-  if (!socket) {
-    closeBridge();
-    outObserver.reset();
-    inObserver.reset();
-    roomEl.textContent = "none";
-    bytesInEl.textContent = "0";
-    bytesOutEl.textContent = "0";
-    state.set(serial ? "SERIAL_OPEN" : "IDLE");
-    refreshControls();
-  }
-  showAppMessage(message);
-}
-
 async function releaseSerial(): Promise<void> {
   closeBridge();
   const active = serial;
   serial = undefined;
   portEl.textContent = "none";
   await active?.close().catch(() => undefined);
-}
-
-function refreshControls(): void {
-  const roomActive = Boolean(socket) && socket!.readyState < WebSocket.CLOSING;
-  cancelButton.hidden = !roomActive;
 }
 
 function must<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -224,7 +240,6 @@ function shortStatus(message: string): string {
   if (/dongle connected/i.test(message)) return "dongle connected";
   if (/room open/i.test(message)) return "room open";
   if (/exchange live/i.test(message)) return "exchange live";
-  if (/cancelled/i.test(message)) return "cancelled";
   if (/already open/i.test(message)) return "dongle already open";
   if (/could not open/i.test(message)) return "dongle busy";
   if (/relay/i.test(message) && /room|create/i.test(message)) return "relay unavailable";

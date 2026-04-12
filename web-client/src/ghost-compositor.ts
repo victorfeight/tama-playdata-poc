@@ -13,14 +13,25 @@ export async function composeGhostPreview(ghost: GhostPreview): Promise<Composit
   const bodyId = resolveBodyId(ghost);
   const eyeId = mapLabCharacterId(ghost.eyeCharaId);
   const body = CHARACTER_BY_ID.get(bodyId);
-  if (!body) return undefined;
+  if (!body) {
+    console.warn(
+      `[compositor] no sprite record for bodyId=${bodyId} (chara=${ghost.charaId}, eye=${ghost.eyeCharaId}). known ids=${CHARACTER_BY_ID.size}`
+    );
+    return undefined;
+  }
 
   const [bodyImage, eyeImage, mouthImage] = await Promise.all([
     loadPart(bodyId, "body"),
     loadPart(eyeId, "eyes"),
     loadPart(bodyId, "mouth")
   ]);
-  if (!bodyImage || !eyeImage || !mouthImage) return undefined;
+  if (!bodyImage || !eyeImage || !mouthImage) {
+    console.warn(
+      `[compositor] missing sprite image(s) for bodyId=${bodyId} eyeId=${eyeId}`,
+      { body: Boolean(bodyImage), eyes: Boolean(eyeImage), mouth: Boolean(mouthImage) }
+    );
+    return undefined;
+  }
 
   const drawOffsetX = Math.max(0, -body.eyeX, -body.mouthX);
   const drawOffsetY = Math.max(0, -body.eyeY, -body.mouthY);
@@ -64,6 +75,7 @@ async function loadPart(id: number, part: "body" | "eyes" | "mouth"): Promise<HT
   try {
     return await loadImage(src);
   } catch {
+    console.warn(`[compositor] sprite file not found: ${src}`);
     return undefined;
   }
 }

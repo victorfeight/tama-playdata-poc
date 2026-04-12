@@ -15,6 +15,11 @@ export class ExchangeScreen {
     this.queueRender();
   }
 
+  pushSystem(message: string): void {
+    this.log.pushSystem(message);
+    this.queueRender();
+  }
+
   showGhost(ghost: GhostPreview): void {
     const checksum = ghost.validChecksum ? "checksum ok" : "checksum changed";
     this.ghostElement.textContent = `${ghost.label}: chara ${ghost.charaId}, eye ${ghost.eyeCharaId}, stage ${ghost.stage}, gender ${ghost.gender}, color ${ghost.color}. ${checksum}.`;

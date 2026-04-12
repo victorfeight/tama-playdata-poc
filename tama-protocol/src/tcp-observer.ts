@@ -22,6 +22,7 @@ export interface TcpObserverEvents {
   packet?(packet: ObservedPacket): void;
   command?(line: string): void;
   error?(message: string): void;
+  resync?(reason: string, totalResyncs: number): void;
 }
 
 type Phase =
@@ -42,8 +43,13 @@ export class TcpObserver {
   private buffer: Uint8Array = new Uint8Array();
   private phase: Phase = { kind: "idle" };
   private draining = false;
+  private resyncCount = 0;
 
   constructor(private readonly events: TcpObserverEvents = {}) {}
+
+  get resyncs(): number {
+    return this.resyncCount;
+  }
 
   reset(): void {
     this.buffer = new Uint8Array();
@@ -62,10 +68,22 @@ export class TcpObserver {
     try {
       // eslint-disable-next-line no-constant-condition
       while (true) {
+        // push() may be called synchronously while we are awaiting a
+        // consumeChunk(); in that case the buffer grows behind our back and
+        // consumeChunk's first-line length check returns false with a stale
+        // view. Snapshot before each step so we can retry when the buffer
+        // outgrew the reason consumeChunk bailed.
+        const before = this.buffer.length;
         if (this.phase.kind === "idle") {
-          if (!this.consumeCommandLine()) return;
+          if (!this.consumeCommandLine()) {
+            if (this.buffer.length > before) continue;
+            return;
+          }
         } else {
-          if (!(await this.consumeChunk())) return;
+          if (!(await this.consumeChunk())) {
+            if (this.buffer.length > before) continue;
+            return;
+          }
         }
       }
     } finally {
@@ -130,9 +148,13 @@ export class TcpObserver {
       // Chunk didn't parse. Possible causes:
       //   - we joined mid-stream and framing is off
       //   - retransmit aligned weirdly
+      //   - wire corruption (CRC mismatch)
       // Advance by 1 byte and try to re-sync at next CRLF. This is cheap;
       // passive observation can afford to resync.
-      this.events.error?.(`chunk parse failed: ${error instanceof Error ? error.message : String(error)}`);
+      const reason = error instanceof Error ? error.message : String(error);
+      this.resyncCount += 1;
+      this.events.error?.(`chunk parse failed: ${reason}`);
+      this.events.resync?.(reason, this.resyncCount);
       this.buffer = this.buffer.slice(1);
       this.phase = { kind: "idle" };
       return true;
