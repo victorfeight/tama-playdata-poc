@@ -594,19 +594,31 @@ should load. Two tabs · Create Room / Join Room → PAIRED → exchange.
 
 ## 17. Redeploy / push changes
 
-Complete rebuild and restart:
+### Git-pull workflow (current, preferred)
+
+`/srv/playdate` is a git checkout of **github.com/victorfeight/tama-playdata-poc**,
+authenticated via a GitHub **deploy key** (read-only) at `~/.ssh/github_deploy`
+on the droplet. Deploys are `git push` locally, `git pull` + rebuild + restart
+on the droplet.
+
+**Local — commit and push as usual:**
 
 ```bash
-# From local /home/vic/Documents/SITE_LATEST/tama-breed-poc
-rsync -az --delete \
-  --exclude node_modules --exclude dist --exclude .git/ --exclude 'relay-server/data' \
-  -e 'ssh' . playdate:/srv/playdate/
+cd /home/vic/Documents/SITE_LATEST/tama-breed-poc
+git add -A && git commit -m "<msg>"
+git push origin main
+```
 
+**Droplet — pull + rebuild + restart (full):**
+
+```bash
 ssh playdate 'set -e
 cd /srv/playdate
+git pull
 pnpm install --frozen-lockfile
-# Rebuild web-client with prod env baked in
-RELAY_SECRET=$(grep ^SHARED_SECRET= relay-server/.env | cut -d= -f2-) \
+# tama-protocol must build first so its .d.ts exists for web-client TS to compile
+pnpm --filter @tama-breed-poc/tama-protocol build
+RELAY_SECRET=$(grep ^SHARED_SECRET= relay-server/.env | cut -d= -f2-)
 VITE_RELAY_URL=https://playdate.bbamorachi.us \
 VITE_RELAY_SECRET=$RELAY_SECRET \
 pnpm --filter @tama-breed-poc/web-client build
@@ -616,24 +628,98 @@ curl -sS http://127.0.0.1:3001/health
 '
 ```
 
-Relay-only hot restart (no code change, just restart process):
+**Relay-only hot restart** (no code change, just bounce the process):
 
 ```bash
 ssh playdate 'sudo systemctl restart playdate-relay && \
   sleep 2 && systemctl status playdate-relay --no-pager | head -5'
 ```
 
-Web-client-only rebuild (no relay restart — static files are served by nginx):
+**Web-client-only rebuild** (no relay restart — nginx serves static files live):
 
 ```bash
-ssh playdate 'bash -s' <<'EOF'
-set -e
-cd /srv/playdate/web-client
-RELAY_SECRET=$(grep ^SHARED_SECRET= ../relay-server/.env | cut -d= -f2-)
+ssh playdate 'set -e
+cd /srv/playdate
+git pull
+pnpm --filter @tama-breed-poc/tama-protocol build
+RELAY_SECRET=$(grep ^SHARED_SECRET= relay-server/.env | cut -d= -f2-)
 VITE_RELAY_URL=https://playdate.bbamorachi.us \
 VITE_RELAY_SECRET=$RELAY_SECRET \
-pnpm build
+pnpm --filter @tama-breed-poc/web-client build
+'
+```
+
+### One-time deploy-key setup (reference — already done on this droplet)
+
+If you ever recreate the droplet, this is the sequence that wires `git pull`
+to GitHub without any password / PAT on the box:
+
+```bash
+ssh playdate '
+# Generate a read-only key pair for GitHub (no passphrase so systemd-era pulls work)
+ssh-keygen -t ed25519 -C "playdate-droplet deploy key" -f ~/.ssh/github_deploy -N ""
+
+# Route git@github.com through this key
+cat > ~/.ssh/config <<EOF
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/github_deploy
+    IdentitiesOnly yes
+    StrictHostKeyChecking accept-new
 EOF
+chmod 600 ~/.ssh/config
+
+cat ~/.ssh/github_deploy.pub
+'
+```
+
+Copy the printed public key, then in GitHub:
+
+1. Go to **github.com/victorfeight/tama-playdata-poc → Settings → Deploy keys**
+2. Click **Add deploy key**
+3. Title: `playdate-droplet`
+4. Key: paste the line from above
+5. **Leave "Allow write access" UNCHECKED**
+6. Add key.
+
+Test with:
+
+```bash
+ssh playdate 'ssh -T git@github.com'
+# Expected: "Hi victorfeight! You've successfully authenticated..."
+```
+
+Then clone into `/srv/playdate`:
+
+```bash
+ssh playdate '
+sudo mkdir -p /srv/playdate
+sudo chown vic:vic /srv/playdate
+sudo -u vic git clone git@github.com:victorfeight/tama-playdata-poc.git /tmp/playdate-clone
+sudo -u vic bash -c "shopt -s dotglob; mv /tmp/playdate-clone/* /srv/playdate/"
+rm -rf /tmp/playdate-clone
+# Restore .env + data from backup if applicable (or regenerate via §12)
+'
+```
+
+### Legacy rsync workflow (fallback)
+
+Keep in back pocket in case GitHub is down or the deploy key is revoked.
+Still works because nothing on the droplet depends on the repo being a git
+checkout at runtime — only at deploy time.
+
+```bash
+rsync -az --delete \
+  --exclude node_modules --exclude dist --exclude .git/ --exclude 'relay-server/data' \
+  -e 'ssh' . playdate:/srv/playdate/
+
+ssh playdate 'cd /srv/playdate && pnpm install --frozen-lockfile && \
+  pnpm --filter @tama-breed-poc/tama-protocol build && \
+  RELAY_SECRET=$(grep ^SHARED_SECRET= relay-server/.env | cut -d= -f2-) \
+  VITE_RELAY_URL=https://playdate.bbamorachi.us VITE_RELAY_SECRET=$RELAY_SECRET \
+  pnpm --filter @tama-breed-poc/web-client build && \
+  sudo systemctl restart playdate-relay'
 ```
 
 ---
