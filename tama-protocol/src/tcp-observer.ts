@@ -13,10 +13,16 @@ import { CHUNK_HEADER_LENGTH, CHUNK_MAX_LENGTH, NONCE_LENGTH, parseChunk } from 
 import { tcpCrypt } from "./tcp-crypto";
 
 export interface ObservedPacket {
-  msgType: number;
+  msgType: number;       // low 4 bits (payload type)
+  rawMsgType: number;    // full byte including flags (0x10 = set session id)
   sessionId: number;
   payload: Uint8Array;
 }
+
+// High nibble of msgType signals protocol-level operations, not game data.
+// 0x10 = "set session ID" packet; payload is 2 random bytes. See
+// tama-para-research/protocols/tcp.md §Set session ID.
+export const MSG_FLAG_SET_SESSION_ID = 0x10;
 
 export interface TcpObserverEvents {
   packet?(packet: ObservedPacket): void;
@@ -176,6 +182,7 @@ export class TcpObserver {
       const payload = joinChunks(this.phase.chunks, this.phase.totalLength);
       const packet: ObservedPacket = {
         msgType: this.phase.lastMsgType & 0x0f,
+        rawMsgType: this.phase.lastMsgType,
         sessionId: this.phase.lastSessionId,
         payload
       };

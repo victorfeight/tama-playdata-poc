@@ -3,14 +3,28 @@ import { Object2d } from "./object2d";
 import { CompositedGhost } from "../ghost-compositor";
 import { GhostPreview } from "../ghost-preview";
 
+const FRIENDSHIP_MAX = 4;
+// 48x16 "horizontal half heart" strip frames in order: full, half, empty.
+// We use only frame 0 (full) and frame 2 (empty); middle half is skipped
+// because Paradise friendship is integer 0..4.
+const HEART_SRC_FULL_X = 0;
+const HEART_SRC_EMPTY_X = 32;
+const HEART_SIZE = 16;
+
 export class Scene {
   private localGhost?: Object2d;
   private peerGhost?: Object2d;
   private localLabel = "your tama";
   private peerLabel = "peer tama";
   private status = "native link ready";
+  private friendship: number | undefined;
+  private heartImage: HTMLImageElement | undefined;
 
-  constructor(private readonly drawer: Drawer) {}
+  constructor(private readonly drawer: Drawer) {
+    const img = new Image();
+    img.onload = () => { this.heartImage = img; };
+    img.src = "/sprites/heart.png";
+  }
 
   mount(): void {
     this.drawer.clear();
@@ -64,6 +78,12 @@ export class Scene {
     this.status = status;
   }
 
+  setFriendship(level: number): void {
+    // Paradise caps friendship at 4. Clamp so a malformed packet can't make
+    // us try to draw a weird number of hearts.
+    this.friendship = Math.max(0, Math.min(FRIENDSHIP_MAX, Math.round(level)));
+  }
+
   private drawHud(ctx: CanvasRenderingContext2D): void {
     ctx.save();
     ctx.font = "22px Pixelify, sans-serif";
@@ -79,7 +99,24 @@ export class Scene {
     drawCenteredText(ctx, this.peerLabel, 602, 86, 176);
     ctx.font = "18px Pixelify, sans-serif";
     drawCenteredText(ctx, this.status, 400, 454, 256);
+    this.drawFriendshipHearts(ctx);
     ctx.restore();
+  }
+
+  private drawFriendshipHearts(ctx: CanvasRenderingContext2D): void {
+    if (this.friendship === undefined || !this.heartImage) return;
+    const scale = 2; // render 16x16 hearts at 32px for readability
+    const size = HEART_SIZE * scale;
+    const gap = 4;
+    const totalWidth = FRIENDSHIP_MAX * size + (FRIENDSHIP_MAX - 1) * gap;
+    const startX = Math.round(400 - totalWidth / 2);
+    const y = 160;
+    ctx.imageSmoothingEnabled = false;
+    for (let i = 0; i < FRIENDSHIP_MAX; i += 1) {
+      const srcX = i < this.friendship ? HEART_SRC_FULL_X : HEART_SRC_EMPTY_X;
+      const destX = startX + i * (size + gap);
+      ctx.drawImage(this.heartImage, srcX, 0, HEART_SIZE, HEART_SIZE, destX, y, size, size);
+    }
   }
 }
 

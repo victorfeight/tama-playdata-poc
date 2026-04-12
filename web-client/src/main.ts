@@ -13,6 +13,7 @@ import { connectDongle, hasWebSerial } from "./utils/webserial";
 import {
   GHOST_HEADER_USED_LENGTH,
   GHOST_SIZE,
+  MSG_FLAG_SET_SESSION_ID,
   ObservedPacket,
   parseGhost,
   TcpObserver,
@@ -61,6 +62,13 @@ function handlePacket(source: "local" | "peer", packet: ObservedPacket): void {
     return;
   }
 
+  // Session-ID setter: 2 random bytes sent at the start of a session. Not a
+  // friendship update. Skip so we don't display garbage values.
+  if ((packet.rawMsgType & MSG_FLAG_SET_SESSION_ID) !== 0) {
+    exchange.pushSystem(`${source}: session id set (${packet.payload.length} bytes)`);
+    return;
+  }
+
   // Short msgType=1 payloads are the playdate-protocol control packets:
   //   2 bytes = friendship update (u16)
   //   4 bytes = play result { result u16, can_breed u16 } per playdate.md §Phase 3
@@ -69,7 +77,8 @@ function handlePacket(source: "local" | "peer", packet: ObservedPacket): void {
   if (packet.payload.length === 2) {
     const view = new DataView(packet.payload.buffer, packet.payload.byteOffset, packet.payload.byteLength);
     const friendship = view.getUint16(0, true);
-    scene.setStatus(`${source === "local" ? "your" : "peer"} friendship → ${friendship}`);
+    scene.setFriendship(friendship);
+    scene.setStatus(`friendship: ${friendship}/4`);
     exchange.pushSystem(`${source}: friendship update = ${friendship}`);
     return;
   }

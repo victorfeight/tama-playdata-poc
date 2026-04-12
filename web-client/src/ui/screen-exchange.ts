@@ -4,6 +4,8 @@ import { HexLog } from "../utils/hex-log";
 export class ExchangeScreen {
   private readonly log = new HexLog();
   private renderQueued = false;
+  private readonly ghostLines = new Map<GhostPreview["source"], string>();
+  private messageLine: string | undefined;
 
   constructor(
     private readonly logElement: HTMLElement,
@@ -20,13 +22,28 @@ export class ExchangeScreen {
     this.queueRender();
   }
 
+  // Each source (local / peer) keeps its own line so both ghosts stack once
+  // they arrive, instead of the later one clobbering the earlier one.
   showGhost(ghost: GhostPreview): void {
     const checksum = ghost.validChecksum ? "checksum ok" : "checksum changed";
-    this.ghostElement.textContent = `${ghost.label}: chara ${ghost.charaId}, eye ${ghost.eyeCharaId}, stage ${ghost.stage}, gender ${ghost.gender}, color ${ghost.color}. ${checksum}.`;
+    const line = `${ghost.label}: chara ${ghost.charaId}, eye ${ghost.eyeCharaId}, stage ${ghost.stage}, gender ${ghost.gender}, color ${ghost.color}. ${checksum}.`;
+    this.ghostLines.set(ghost.source, line);
+    this.renderGhostElement();
   }
 
   showMessage(message: string): void {
-    this.ghostElement.textContent = message;
+    this.messageLine = message;
+    this.renderGhostElement();
+  }
+
+  private renderGhostElement(): void {
+    const lines: string[] = [];
+    if (this.messageLine) lines.push(this.messageLine);
+    const local = this.ghostLines.get("local");
+    const peer = this.ghostLines.get("peer");
+    if (local) lines.push(local);
+    if (peer) lines.push(peer);
+    this.ghostElement.textContent = lines.join("\n");
   }
 
   private queueRender(): void {

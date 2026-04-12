@@ -170,6 +170,7 @@ dd {
 #ghost-summary {
   margin: 0;
   font-size: 1.1rem;
+  white-space: pre-line;
 }
 
 .observer-status {
