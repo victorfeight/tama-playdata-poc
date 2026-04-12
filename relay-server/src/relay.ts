@@ -11,6 +11,9 @@ interface Pair {
   b?: Peer | undefined;
 }
 
+// Pure byte pipe. Any gating / holding / role-asymmetry introduced more
+// first-try failures than it prevented; Paradise firmware's own retry
+// mechanism handles collisions fine if we stay out of the way.
 export class RelayHub {
   private readonly pairs = new Map<string, Pair>();
   private readonly heartbeatMs = 25_000;

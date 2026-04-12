@@ -60,9 +60,33 @@ function handlePacket(source: "local" | "peer", packet: ObservedPacket): void {
     console.debug(`[obs ${source}] ignored non-playdate packet (msgType=${packet.msgType})`);
     return;
   }
+
+  // Short msgType=1 payloads are the playdate-protocol control packets:
+  //   2 bytes = friendship update (u16)
+  //   4 bytes = play result { result u16, can_breed u16 } per playdate.md §Phase 3
+  // Surface these in the bottom plate so the user sees what actually happened
+  // (fought, ate, played, breeding offered).
+  if (packet.payload.length === 2) {
+    const view = new DataView(packet.payload.buffer, packet.payload.byteOffset, packet.payload.byteLength);
+    const friendship = view.getUint16(0, true);
+    scene.setStatus(`${source === "local" ? "your" : "peer"} friendship → ${friendship}`);
+    exchange.pushSystem(`${source}: friendship update = ${friendship}`);
+    return;
+  }
+  if (packet.payload.length === 4) {
+    const view = new DataView(packet.payload.buffer, packet.payload.byteOffset, packet.payload.byteLength);
+    const result = view.getUint16(0, true);
+    const canBreed = view.getUint16(2, true) & 1;
+    const label = playResultLabel(result);
+    const breed = canBreed ? " · breeding available" : "";
+    scene.setStatus(`result: ${label}${breed}`);
+    exchange.pushSystem(`${source}: play result ${result} (${label})${canBreed ? ", can_breed=1" : ""}`);
+    return;
+  }
+
   if (packet.payload.length < GHOST_HEADER_USED_LENGTH) {
-    console.warn(`[obs ${source}] packet too short for a ghost header: ${packet.payload.length}`);
-    exchange.pushSystem(`${source}: packet too short to be a ghost (${packet.payload.length} bytes)`);
+    console.warn(`[obs ${source}] short packet, unknown format: ${packet.payload.length}`);
+    exchange.pushSystem(`${source}: unknown short packet (${packet.payload.length} bytes)`);
     return;
   }
 
@@ -99,8 +123,21 @@ function headHex(data: Uint8Array, n: number): string {
   return [...data.slice(0, n)].map((b) => b.toString(16).padStart(2, "0")).join(" ");
 }
 
+function playResultLabel(code: number): string {
+  // Per tama-para-research/protocols/playdate.md §Phase 3
+  switch (code) {
+    case 0: return "played";
+    case 1: return "fought";
+    case 2: return "ate peer";
+    case 3: return "eaten by peer";
+    case 4: return "breeding";
+    default: return `unknown (${code})`;
+  }
+}
+
 const portEl = must("port");
 const roomEl = must("room");
+const roleEl = must("role");
 const bytesInEl = must("bytes-in");
 const bytesOutEl = must("bytes-out");
 const codeInput = must<HTMLInputElement>("room-code");
@@ -132,6 +169,7 @@ must<HTMLButtonElement>("create-room").addEventListener("click", async () => {
     const code = await relay.createRoom();
     codeInput.value = code;
     roomEl.textContent = code;
+    roleEl.textContent = "host (A)";
     await connectWs(code, "a");
   } catch (error) {
     showAppError(error);
@@ -144,6 +182,7 @@ must<HTMLButtonElement>("join-room").addEventListener("click", async () => {
   try {
     await dropExistingSocket();
     roomEl.textContent = code;
+    roleEl.textContent = "guest (B)";
     await connectWs(code, "b");
   } catch (error) {
     showAppError(error);
@@ -172,6 +211,7 @@ async function connectWs(code: string, role: "a" | "b"): Promise<void> {
     outObserver.reset();
     inObserver.reset();
     roomEl.textContent = "none";
+    roleEl.textContent = "—";
     bytesInEl.textContent = "0";
     bytesOutEl.textContent = "0";
     state.set(serial ? "SERIAL_OPEN" : "IDLE");

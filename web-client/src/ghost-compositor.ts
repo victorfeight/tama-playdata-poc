@@ -59,7 +59,7 @@ export async function composeGhostPreview(ghost: GhostPreview): Promise<Composit
   return {
     bitmap: canvas,
     name: body.name,
-    details: `${ghost.source === "local" ? "You" : "Peer"} / ${colorNameFromIndex(ghost.color)} / stage ${ghost.stage}`
+    details: `${ghost.source === "local" ? "your ghost" : "peer ghost"} · ${body.name} · stage ${ghost.stage} · ${colorNameFromIndex(ghost.color)}`
   };
 }
 

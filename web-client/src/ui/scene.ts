@@ -56,7 +56,8 @@ export class Scene {
 
     if (source === "local") this.localLabel = rendered.name;
     else this.peerLabel = rendered.name;
-    this.status = rendered.details;
+    // Do NOT overwrite status here -- it's reserved for playdate result
+    // (fight/play/eat/breed). Ghost name is already shown in the top plates.
   }
 
   setStatus(status: string): void {
