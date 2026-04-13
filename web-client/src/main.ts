@@ -94,10 +94,10 @@ function makeObserver(source: "local" | "peer", label: "out" | "in"): TcpObserve
       // Surface breeding-phase events on the scene plate too. Only the
       // RECIPIENT sends BREED (per playdate.md §Phase 4); SYNC 2 closes the
       // breeding animation on both sides.
-      if (/^BREED\s+1$/i.test(line)) scene.setStatus("breeding accepted");
+      if (/^BREED\s+1$/i.test(line)) scene.setStatus("breeding...");
       else if (/^BREED\s+0$/i.test(line)) scene.setStatus("breeding declined");
       else if (/^SYNC\s+2$/i.test(line)) {
-        scene.setStatus("egg hatching...");
+        scene.setStatus("breeding successful");
         scene.triggerEggHatch();
       }
     },
