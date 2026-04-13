@@ -9,7 +9,7 @@
 
 import { parseGhost } from "./ghost";
 import { getEnglishGhostName, getJapaneseGhostName } from "./ghost-name";
-import { parseSingleSpriteImage, RgbaImage, SpriteHeader } from "./sprite-parser";
+import { parseSingleSpriteImage, rgb565PaletteToRgba, RgbaImage, SpriteHeader } from "./sprite-parser";
 
 export interface GhostSpritePart {
   header: SpriteHeader;
@@ -45,9 +45,16 @@ export function renderGhost(ghost: Uint8Array): GhostRender {
   const parsed = parseGhost(ghost);
   const tamaView = parsed.spriteLocations[0] ?? [];
 
-  const body = extractPart(ghost, tamaView[0]);
-  const eyes = extractPart(ghost, tamaView[1]);
-  const mouth = extractPart(ghost, tamaView[2]);
+  // Convert the ghost header's palettes to RGBA once. body_palette and
+  // mouth_palette are the AUTHORITATIVE final palettes for this ghost
+  // (post color selection); spec §Ghost data. Eyes intentionally pass no
+  // override -- they always use the embedded sprite's own palette.
+  const bodyPaletteRgba = parsed.bodyPalette.length ? rgb565PaletteToRgba(parsed.bodyPalette) : undefined;
+  const mouthPaletteRgba = parsed.mouthPalette.length ? rgb565PaletteToRgba(parsed.mouthPalette) : undefined;
+
+  const body = extractPart(ghost, tamaView[0], bodyPaletteRgba);
+  const eyes = extractPart(ghost, tamaView[1], undefined);
+  const mouth = extractPart(ghost, tamaView[2], mouthPaletteRgba);
 
   return {
     name: getEnglishGhostName(ghost),
@@ -64,7 +71,11 @@ export function renderGhost(ghost: Uint8Array): GhostRender {
   };
 }
 
-function extractPart(ghost: Uint8Array, entry: { offset: number; length: number } | undefined): GhostSpritePart | undefined {
+function extractPart(
+  ghost: Uint8Array,
+  entry: { offset: number; length: number } | undefined,
+  overridePalette: Uint32Array | undefined
+): GhostSpritePart | undefined {
   if (!entry) return undefined;
   if (entry.length === 0) return undefined;
   if (entry.offset <= 0 || entry.offset >= ghost.byteLength) return undefined;
@@ -73,7 +84,7 @@ function extractPart(ghost: Uint8Array, entry: { offset: number; length: number 
 
   let image;
   try {
-    image = parseSingleSpriteImage(packageBytes);
+    image = parseSingleSpriteImage(packageBytes, { overridePalette });
   } catch {
     return undefined;
   }

@@ -101,16 +101,41 @@ export function parseSpriteHeader(data: Uint8Array, offset = 0): SpriteHeader {
  * table points to a single SpriteHeader+data pair). This is the normal path
  * for playdate ghost rendering.
  */
-export function parseSingleSpriteImage(spriteData: Uint8Array): SpriteImage {
+/**
+ * Optional palette override for ghost rendering. The ghost header carries
+ * `body_palette` and `mouth_palette` (each 16 RGB565 colors) which are the
+ * authoritative final palettes for that ghost — accounting for the player's
+ * color selection (one of 15 predefined schemes) or the sprite default
+ * (color = 0xFF). When provided, it replaces palette index 0 in firstFrame.
+ * See ghost spec §Ghost data.
+ */
+export interface SpriteRenderOptions {
+  overridePalette?: Uint32Array | undefined;
+}
+
+export function parseSingleSpriteImage(spriteData: Uint8Array, options: SpriteRenderOptions = {}): SpriteImage {
   if (spriteData.length < 24) throw new Error("sprite data too small for header");
-  return parseSpriteImageAt(spriteData, 0);
+  return parseSpriteImageAt(spriteData, 0, options);
+}
+
+/**
+ * Convert the ghost header's `body_palette` / `mouth_palette` (u16[16] RGB565
+ * little-endian as parsed into number[]) into the Uint32Array RGBA format the
+ * sprite renderer expects. Use this to pass the override into renderGhost.
+ */
+export function rgb565PaletteToRgba(rgb565: ReadonlyArray<number>): Uint32Array {
+  const out = new Uint32Array(rgb565.length);
+  for (let i = 0; i < rgb565.length; i += 1) {
+    out[i] = parseRGB565(rgb565[i] ?? 0);
+  }
+  return out;
 }
 
 /**
  * Parse a Lab-item-format sprite package with a leading offset table followed
  * by multiple sprite images. Not used for ghost rendering; kept for completeness.
  */
-export function parseSpritePackage(spriteData: Uint8Array): SpriteImage[] {
+export function parseSpritePackage(spriteData: Uint8Array, options: SpriteRenderOptions = {}): SpriteImage[] {
   if (spriteData.length < 4) throw new Error("sprite package too small");
   const view = new DataView(spriteData.buffer, spriteData.byteOffset, spriteData.byteLength);
   const firstImageOffset = view.getInt32(0, true);
@@ -126,12 +151,12 @@ export function parseSpritePackage(spriteData: Uint8Array): SpriteImage[] {
   const images: SpriteImage[] = [];
   for (const imgOffset of imageOffsets) {
     if (imgOffset < 0 || imgOffset >= spriteData.length) continue;
-    images.push(parseSpriteImageAt(spriteData, imgOffset));
+    images.push(parseSpriteImageAt(spriteData, imgOffset, options));
   }
   return images;
 }
 
-function parseSpriteImageAt(spriteData: Uint8Array, imgOffset: number): SpriteImage {
+function parseSpriteImageAt(spriteData: Uint8Array, imgOffset: number, options: SpriteRenderOptions = {}): SpriteImage {
   const header = parseSpriteHeader(spriteData, imgOffset);
   const paletteStart = imgOffset + header.paletteOffset;
   const pixelStart = imgOffset + header.pixelDataOffset;
@@ -149,11 +174,32 @@ function parseSpriteImageAt(spriteData: Uint8Array, imgOffset: number): SpriteIm
   const pixelData = spriteData.subarray(pixelStart, dataEnd);
   const pixelDataPerSprite = getPixelDataPerSprite(pixelData, header);
 
+  // Spritesheets keep the sprite's own palettes (used for non-firstFrame
+  // sheet exports where caller may want raw alternates).
   const spritesheets: RgbaImage[] = palettes.map((palette) =>
     renderSpritesheet(pixelDataPerSprite, header, palette)
   );
-  const firstFrame = spritesheets.length
-    ? renderFirstFrame(pixelDataPerSprite, header, palettes[0]!)
+
+  // The firstFrame is what the ghost compositor actually paints. If the
+  // caller passed an overridePalette (the ghost's body_palette /
+  // mouth_palette), use it -- spec says it's the authoritative final palette
+  // for the player's color selection. Otherwise fall back to the sprite's
+  // first palette.
+  let firstFramePalette: Uint32Array | undefined = palettes[0];
+  if (options.overridePalette && header.bpp < 16) {
+    // Trim/pad to colorsPerPalette so the override always has the right size
+    // for this sprite's bit depth.
+    const colorsPerPalette = 1 << header.bpp;
+    if (options.overridePalette.length === colorsPerPalette) {
+      firstFramePalette = options.overridePalette;
+    } else {
+      const adjusted = new Uint32Array(colorsPerPalette);
+      adjusted.set(options.overridePalette.subarray(0, colorsPerPalette));
+      firstFramePalette = adjusted;
+    }
+  }
+  const firstFrame = firstFramePalette
+    ? renderFirstFrame(pixelDataPerSprite, header, firstFramePalette)
     : undefined;
   return { header, spritesheets, firstFrame };
 }
