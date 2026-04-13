@@ -60,6 +60,7 @@ function classifyCommand(line: string): string {
   if (line === "ECHO REQ") return "echo request";
   if (line === "ECHO REP") return "echo reply";
   if (line === "BREED 1") return "breeding accepted";
+  if (line === "BREED 0") return "breeding declined";
   if (line === "SYNC 1") return "breeding sync 1";
   if (line === "SYNC 2") return "breeding sync 2";
   if (/not\s*found/i.test(line) || /^notfound/i.test(line)) return `text: ${line}`;

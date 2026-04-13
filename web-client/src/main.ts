@@ -39,6 +39,33 @@ const canvas = must<HTMLCanvasElement>("link-canvas");
 const scene = new Scene(new Drawer(canvas));
 scene.mount();
 
+// Dev hooks: trigger animations from DevTools or via URL query so you can
+// preview them without actually running a playdate.
+//   window.__previewHearts(n)  -> animate friendship going up to n
+//   window.__previewEgg()      -> trigger the egg hatch sequence
+//   ?preview=hearts            -> auto-run the heart sweep on load
+//   ?preview=egg               -> auto-run the egg hatch on load
+//   ?preview=full              -> hearts then egg (full sequence)
+declare global {
+  interface Window {
+    __previewHearts?: (level?: number) => void;
+    __previewEgg?: () => void;
+  }
+}
+window.__previewHearts = (level = 4) => {
+  scene.setFriendship(0);
+  setTimeout(() => scene.setFriendship(level), 50);
+};
+window.__previewEgg = () => scene.triggerEggHatch();
+const params = new URLSearchParams(window.location.search);
+const preview = params.get("preview");
+if (preview === "hearts" || preview === "full") {
+  setTimeout(() => window.__previewHearts!(4), 400);
+}
+if (preview === "egg" || preview === "full") {
+  setTimeout(() => window.__previewEgg!(), preview === "full" ? 1800 : 400);
+}
+
 const exchange = new ExchangeScreen(must("byte-log"), must("ghost-summary"));
 new LinkScreen(state).bindState(must("state"));
 
@@ -64,6 +91,15 @@ function makeObserver(source: "local" | "peer", label: "out" | "in"): TcpObserve
     command: (line) => {
       console.debug(`[obs ${label}] command`, line);
       exchange.pushSystem(`obs ${label}: ${line}`);
+      // Surface breeding-phase events on the scene plate too. Only the
+      // RECIPIENT sends BREED (per playdate.md §Phase 4); SYNC 2 closes the
+      // breeding animation on both sides.
+      if (/^BREED\s+1$/i.test(line)) scene.setStatus("breeding accepted");
+      else if (/^BREED\s+0$/i.test(line)) scene.setStatus("breeding declined");
+      else if (/^SYNC\s+2$/i.test(line)) {
+        scene.setStatus("egg hatching...");
+        scene.triggerEggHatch();
+      }
     },
     resync: (reason, total) => {
       console.warn(`[obs ${label}] resync #${total}`, reason);
@@ -186,11 +222,12 @@ function maybePredictPreResult(): void {
 
   const prediction = predictPlayType(
     { stage: local.stage, charaFlags: local.charaFlags, hunger: localPd.friendData.hunger, happiness: localPd.friendData.happiness, isInLove: localPd.friendData.isInLove },
-    { stage: peer.stage, charaFlags: peer.charaFlags, hunger: peerPd.friendData.hunger, happiness: peerPd.friendData.happiness, isInLove: peerPd.friendData.isInLove }
+    { stage: peer.stage, charaFlags: peer.charaFlags, hunger: peerPd.friendData.hunger, happiness: peerPd.friendData.happiness, isInLove: peerPd.friendData.isInLove },
+    currentFriendship
   );
-  scene.setStatus(`expecting: ${prediction.label}${prediction.breedingOffered ? " · breed?" : ""}`);
+  scene.setStatus(`expecting: ${prediction.label}${prediction.breedingOffered ? " · breed" : ""}`);
   exchange.pushSystem(
-    `prediction: ${prediction.label}${prediction.breedingOffered ? " (breeding may be offered)" : ""}`
+    `prediction: ${prediction.label}${prediction.breedingOffered ? " + breeding offered" : ""}`
   );
 }
 

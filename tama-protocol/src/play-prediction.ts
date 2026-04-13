@@ -43,7 +43,13 @@ export interface PlayTypePrediction {
   breedingOffered: boolean;
 }
 
-export function predictPlayType(local: SideInputs, peer: SideInputs): PlayTypePrediction {
+/**
+ * @param friendship the Phase-2 transmitted friendship value. Required for a
+ *   definitive breeding-offered decision (spec: "friendship level of 4").
+ *   Pass undefined if Phase 2 hasn't arrived yet — in that case breedingOffered
+ *   will be false (we don't speculate).
+ */
+export function predictPlayType(local: SideInputs, peer: SideInputs, friendship?: number): PlayTypePrediction {
   // 1. Eat-or-be-eaten (wins over fight / normal)
   const eitherNotFull = local.hunger < 6 || peer.hunger < 6;
   if (eitherNotFull) {
@@ -61,12 +67,13 @@ export function predictPlayType(local: SideInputs, peer: SideInputs): PlayTypePr
     return { code: 1, label: "fought", breedingOffered: false };
   }
 
-  // 3. Normal play.
+  // 3. Normal play. Breeding is offered after normal play iff both are adult
+  // (stage 5), current friendship is 4, and neither is unbreedable. All inputs
+  // are on the wire — no ambiguity.
   const breedingOffered = (
     local.stage === 5 && peer.stage === 5 &&
+    friendship === 4 &&
     !local.charaFlags.isUnbreedable && !peer.charaFlags.isUnbreedable
-    // friendship=4 check happens post-play (we don't yet have the post-update
-    // friendship); surface "offered if friendship reaches 4" upstream.
   );
   return { code: 0, label: "played", breedingOffered };
 }
