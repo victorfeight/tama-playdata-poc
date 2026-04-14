@@ -408,8 +408,12 @@ async function attachBridge(): Promise<void> {
     },
     error(error) {
       // Bridge owns its own death — clearing the reference here is what
-      // lets the next user click re-attach without a refresh.
+      // lets the next user click re-attach without a refresh. Also close
+      // the WS so the peer's observer gets a clean reset instead of
+      // sitting on a stale partial packet (their ws.close handler runs
+      // beginSession on their side).
       bridge = undefined;
+      socket?.close();
       renderHud();
       showAppError(error);
     }
@@ -424,6 +428,11 @@ async function releaseSerial(): Promise<void> {
   bridge?.stop();
   bridge = undefined;
   serial = undefined;
+  // Close the WS too so the relay kicks the peer (4000 'peer closed').
+  // Their ws.close handler runs beginSession() on that side, which resets
+  // their observers — preventing the stale-partial-packet buffer that
+  // would otherwise corrupt the next session for them.
+  socket?.close();
   renderHud();
   await dyingSerial.close().catch(() => undefined);
 }

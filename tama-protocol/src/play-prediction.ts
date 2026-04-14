@@ -50,13 +50,23 @@ export interface PlayTypePrediction {
  *   will be false (we don't speculate).
  */
 export function predictPlayType(local: SideInputs, peer: SideInputs, friendship?: number): PlayTypePrediction {
-  // 1. Eat-or-be-eaten (wins over fight / normal)
+  // 1. Eat-or-be-eaten (wins over fight / normal). Spec: "one has the
+  // is_consumer attribute and the other has the is_consumee attribute".
+  // The EXCLUSIVE reading is the correct one — spec note says "typically,
+  // if one of the flags are set, the other is not set", and real-world
+  // character data confirms characters like batchi / eagletchi carry BOTH
+  // flags (0x03) and should NOT trigger eat/eaten. Only a pure consumer
+  // vs a pure consumee produces the outcome.
+  const localOnlyConsumer = local.charaFlags.isConsumer && !local.charaFlags.isConsumee;
+  const localOnlyConsumee = local.charaFlags.isConsumee && !local.charaFlags.isConsumer;
+  const peerOnlyConsumer = peer.charaFlags.isConsumer && !peer.charaFlags.isConsumee;
+  const peerOnlyConsumee = peer.charaFlags.isConsumee && !peer.charaFlags.isConsumer;
   const eitherNotFull = local.hunger < 6 || peer.hunger < 6;
   if (eitherNotFull) {
-    if (local.charaFlags.isConsumer && peer.charaFlags.isConsumee) {
+    if (localOnlyConsumer && peerOnlyConsumee) {
       return { code: 2, label: "ate peer", breedingOffered: false };
     }
-    if (peer.charaFlags.isConsumer && local.charaFlags.isConsumee) {
+    if (peerOnlyConsumer && localOnlyConsumee) {
       return { code: 3, label: "eaten by peer", breedingOffered: false };
     }
   }
