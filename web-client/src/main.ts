@@ -480,6 +480,7 @@ function shortStatus(message: string): string {
 
 function friendlyError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
+  if (/no port selected/i.test(message)) return "No dongle selected.";
   if (/port is already open/i.test(message)) return "That dongle is already open in this tab.";
   if (/failed to open serial port/i.test(message)) return "Could not open the dongle. Close other tabs/apps using it, then try again.";
   if (/WebSerial unavailable/i.test(message)) return "Use Chrome or Edge on localhost to connect the dongle.";
