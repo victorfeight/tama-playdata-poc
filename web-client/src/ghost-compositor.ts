@@ -45,24 +45,25 @@ export function composeGhostPreviewFromBin(
     return undefined;
   }
 
-  // Body defines the canvas size. Eyes and mouth are positioned using the
-  // per-character metadata table (CharacterDataEmbedded.cs) which is the
-  // authoritative source for Paradise sprite compositing. Sprite-header
-  // offsetX/offsetY are the sprite's own internal offset and are applied on
-  // top — needed for characters whose eye/mouth tile has an additional shift.
+  // Eyes and mouth are positioned using the per-character metadata table
+  // (CharacterDataEmbedded.cs) — authoritative source for Paradise sprite
+  // compositing. Matches GhostPreviewCompositor.cs:98-103: sprite-header
+  // offsets are intentionally NOT added on top (doing so double-counts the
+  // shift for characters whose eye sprite carries its own offset, e.g.
+  // Shigemi-san, producing visible eye drift).
   const positionId = positionCharaId(rendered);
   const character = getCharacter(positionId);
   if (!character) {
     console.warn(
-      `[compositor] no positioning data for id=${positionId} (chara=${rendered.charaId}, eye=${rendered.eyeCharaId}) — falling back to sprite-header offsets`
+      `[compositor] no positioning data for id=${positionId} (chara=${rendered.charaId}, eye=${rendered.eyeCharaId})`
     );
   }
 
   const base = rendered.body?.frame ?? parts[0]!.frame;
-  const eyeX = (character?.eyeX ?? 0) + (rendered.eyes?.offsetX ?? 0);
-  const eyeY = (character?.eyeY ?? 0) + (rendered.eyes?.offsetY ?? 0);
-  const mouthX = (character?.mouthX ?? 0) + (rendered.mouth?.offsetX ?? 0);
-  const mouthY = (character?.mouthY ?? 0) + (rendered.mouth?.offsetY ?? 0);
+  const eyeX = character?.eyeX ?? 0;
+  const eyeY = character?.eyeY ?? 0;
+  const mouthX = character?.mouthX ?? 0;
+  const mouthY = character?.mouthY ?? 0;
 
   // Grow the canvas to fit negative offsets (some characters have eye/mouth
   // shifted left/up of the body origin; TamaParadise does the same shift).

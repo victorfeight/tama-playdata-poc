@@ -33,29 +33,35 @@ export class WebSerialTransport implements Transport {
   private writer: WritableStreamDefaultWriter<Uint8Array> | undefined;
   private openState = false;
 
-  constructor(private readonly port: SerialPortLike) {}
+  constructor(private readonly _port: SerialPortLike) {}
+
+  /** Underlying SerialPort handle — exposed so callers can match against
+   *  navigator.serial 'disconnect' events. */
+  get port(): SerialPortLike {
+    return this._port;
+  }
 
   get isOpen(): boolean {
     return this.openState;
   }
 
   get info(): PortInfo {
-    return describePort(this.port.getInfo?.() ?? {});
+    return describePort(this._port.getInfo?.() ?? {});
   }
 
   async open(options: SerialOpenOptions = {}): Promise<void> {
     if (this.openState) return;
     const baudRate = options.baudRate ?? DEFAULT_SERIAL_OPTIONS.baudRate;
-    await this.port.open({
+    await this._port.open({
       baudRate,
       dataBits: 8,
       stopBits: 1,
       parity: "none",
       flowControl: "none"
     });
-    if (!this.port.readable || !this.port.writable) throw new Error("serial port missing streams after open");
-    this.reader = this.port.readable.getReader();
-    this.writer = this.port.writable.getWriter();
+    if (!this._port.readable || !this._port.writable) throw new Error("serial port missing streams after open");
+    this.reader = this._port.readable.getReader();
+    this.writer = this._port.writable.getWriter();
     this.openState = true;
   }
 
@@ -96,7 +102,7 @@ export class WebSerialTransport implements Transport {
       // Ignore stale writer locks during teardown.
     }
     try {
-      await this.port.close();
+      await this._port.close();
     } catch {
       // The browser reports this when the port has already been released.
     }
@@ -115,6 +121,8 @@ declare global {
     serial?: {
       requestPort(): Promise<unknown>;
       getPorts(): Promise<unknown[]>;
+      addEventListener(type: "connect" | "disconnect", listener: (event: Event & { target: SerialPortLike }) => void): void;
+      removeEventListener(type: "connect" | "disconnect", listener: (event: Event & { target: SerialPortLike }) => void): void;
     };
   }
 }

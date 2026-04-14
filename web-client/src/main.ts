@@ -4,10 +4,8 @@ import { composeGhostPreviewFromBin } from "./ghost-compositor";
 import { toGhostPreview } from "./ghost-preview";
 import { RelayClient } from "./relay-client";
 import { SerialBridge } from "./serial-bridge";
-import { StateMachine } from "./state";
 import { Drawer } from "./ui/drawer";
 import { ExchangeScreen } from "./ui/screen-exchange";
-import { LinkScreen } from "./ui/screen-link";
 import { Scene } from "./ui/scene";
 import { connectDongle, hasWebSerial } from "./utils/webserial";
 import {
@@ -28,11 +26,19 @@ import {
 
 // Simple lifecycle: attach the bridge the moment both a dongle and a socket
 // are open. Re-clicking Create/Join automatically drops any existing socket.
+// Dongle disconnects (USB unplug) and dead bridges (serial.read failure) both
+// funnel into the same recovery path: `releaseSerial()` / `bridge = undefined`,
+// which makes the next user click attach cleanly. No browser refresh needed.
 
-const state = new StateMachine();
 let serial: WebSerialTransport | undefined;
 let bridge: SerialBridge | undefined;
 let socket: WebSocket | undefined;
+let currentRoom: string | undefined;
+// Last room this tab was actively in; survives WS close so Join Room with
+// the same code rejoins in the same role (sticky-rejoin). Cleared/replaced
+// when the user explicitly enters a different room or creates a new one.
+let lastRoom: string | undefined;
+let role: "host" | "guest" | undefined;
 let serialOpenPending = false;
 
 const canvas = must<HTMLCanvasElement>("link-canvas");
@@ -67,7 +73,6 @@ if (preview === "egg" || preview === "full") {
 }
 
 const exchange = new ExchangeScreen(must("byte-log"), must("ghost-summary"));
-new LinkScreen(state).bindState(must("state"));
 
 const outObserver = makeObserver("local", "out");
 const inObserver = makeObserver("peer", "in");
@@ -79,10 +84,13 @@ interface SideState { ghost?: ParsedGhost; playData?: PlayData }
 const sides: Record<"local" | "peer", SideState> = { local: {}, peer: {} };
 let currentFriendship: number | undefined;
 
-function resetSessionState(): void {
+function beginSession(): void {
   sides.local = {};
   sides.peer = {};
   currentFriendship = undefined;
+  outObserver.reset();
+  inObserver.reset();
+  scene.beginSession();
 }
 
 function makeObserver(source: "local" | "peer", label: "out" | "in"): TcpObserver {
@@ -266,10 +274,23 @@ function playResultLabel(code: number): string {
 const portEl = must("port");
 const roomEl = must("room");
 const roleEl = must("role");
+const activityEl = must("activity");
 const bytesInEl = must("bytes-in");
 const bytesOutEl = must("bytes-out");
+
+// Last serial-bridge byte timestamp, used to derive Activity = live | idle.
+// "live" = a byte was seen within ACTIVITY_LIVE_MS, "idle" = paired but quiet.
+let lastByteAt = 0;
+const ACTIVITY_LIVE_MS = 2000;
 const codeInput = must<HTMLInputElement>("room-code");
 const relay = new RelayClient({ baseUrl: config.relayUrl, secret: config.relaySecret });
+
+// USB unplug funnels into the same recovery path as a manual click.
+navigator.serial?.addEventListener("disconnect", (event) => {
+  if (serial && (event.target as unknown) === (serial.port as unknown)) {
+    void releaseSerial();
+  }
+});
 
 must<HTMLButtonElement>("connect-serial").addEventListener("click", async () => {
   if (serialOpenPending) return;
@@ -280,10 +301,9 @@ must<HTMLButtonElement>("connect-serial").addEventListener("click", async () => 
     serialOpenPending = true;
     showAppMessage("Choose your Paradise dongle.");
     serial = await connectDongle();
-    portEl.textContent = serial.info.label;
-    if (state.current !== "EXCHANGING") state.set("SERIAL_OPEN");
     showAppMessage("Dongle connected.");
-    tryAttachBridge();
+    renderHud();
+    await attachBridge();
   } catch (error) {
     showAppError(error);
   } finally {
@@ -292,12 +312,19 @@ must<HTMLButtonElement>("connect-serial").addEventListener("click", async () => 
 });
 
 must<HTMLButtonElement>("create-room").addEventListener("click", async () => {
+  // If we're already in a live room, treat as a no-op. Tearing the socket
+  // down to make a new one would kick the peer for no benefit.
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    showAppMessage("Already in a room. Refresh to start a new one.");
+    return;
+  }
   try {
     await dropExistingSocket();
     const code = await relay.createRoom();
     codeInput.value = code;
-    roomEl.textContent = code;
-    roleEl.textContent = "host (A)";
+    currentRoom = code;
+    lastRoom = code;
+    role = "host";
     await connectWs(code, "a");
   } catch (error) {
     showAppError(error);
@@ -307,11 +334,22 @@ must<HTMLButtonElement>("create-room").addEventListener("click", async () => {
 must<HTMLButtonElement>("join-room").addEventListener("click", async () => {
   const code = codeInput.value.trim().toUpperCase();
   if (!code) return;
+  // If we're already live in this exact room, the click is accidental —
+  // don't tear down our own socket (which the relay reads as us leaving and
+  // kicks the peer with "peer closed").
+  if (socket && socket.readyState === WebSocket.OPEN && currentRoom === code) {
+    showAppMessage(`Already in room ${code}.`);
+    return;
+  }
   try {
     await dropExistingSocket();
-    roomEl.textContent = code;
-    roleEl.textContent = "guest (B)";
-    await connectWs(code, "b");
+    // Sticky-rejoin only when the code matches the last room we were in.
+    // A different code means the user is intentionally entering someone
+    // else's room, so default to guest regardless of any prior host role.
+    if (code !== lastRoom) role = "guest";
+    currentRoom = code;
+    lastRoom = code;
+    await connectWs(code, role === "host" ? "a" : "b");
   } catch (error) {
     showAppError(error);
   }
@@ -326,33 +364,39 @@ async function dropExistingSocket(): Promise<void> {
   await done;
 }
 
-async function connectWs(code: string, role: "a" | "b"): Promise<void> {
-  socket = relay.connect(code, role);
-  socket.addEventListener("open", () => {
-    state.set("WS_OPEN");
+async function connectWs(code: string, wsRole: "a" | "b"): Promise<void> {
+  const ws = relay.connect(code, wsRole);
+  socket = ws;
+  // Capture the socket reference so a stale close event from a previously
+  // dropped socket can't clobber a freshly assigned one (Bug 3a).
+  ws.addEventListener("open", () => {
+    if (socket !== ws) return;
     showAppMessage("Room open.");
-    tryAttachBridge();
+    renderHud();
+    void attachBridge();
   });
-  socket.addEventListener("close", () => {
-    closeBridge();
+  ws.addEventListener("close", () => {
+    if (socket !== ws) return;
+    bridge?.stop();
+    bridge = undefined;
     socket = undefined;
-    outObserver.reset();
-    inObserver.reset();
-    resetSessionState();
-    roomEl.textContent = "none";
-    roleEl.textContent = "—";
+    // Capture the room we were in before clearing live state, so Join Room
+    // with the same code can recognise a rejoin and keep the same role.
+    lastRoom = currentRoom;
+    currentRoom = undefined;
     bytesInEl.textContent = "0";
     bytesOutEl.textContent = "0";
-    state.set(serial ? "SERIAL_OPEN" : "IDLE");
+    beginSession();
+    renderHud();
   });
 }
 
-function attachBridge(): void {
-  if (!serial || !socket) return;
-  bridge?.close();
-  outObserver.reset();
-  inObserver.reset();
-  resetSessionState();
+async function attachBridge(): Promise<void> {
+  if (!serial || !socket || socket.readyState !== WebSocket.OPEN) return;
+  if (bridge && !bridge.isClosed) return;
+  bridge?.stop();
+  bridge = undefined;
+  beginSession();
   bridge = new SerialBridge(serial, socket, {
     bytes(direction, data, stats) {
       exchange.pushBytes(direction, data);
@@ -360,33 +404,51 @@ function attachBridge(): void {
       observer.push(data);
       bytesInEl.textContent = String(stats.bytesIn);
       bytesOutEl.textContent = String(stats.bytesOut);
-      if (state.current !== "EXCHANGING") state.set("EXCHANGING");
+      lastByteAt = performance.now();
     },
     error(error) {
+      // Bridge owns its own death — clearing the reference here is what
+      // lets the next user click re-attach without a refresh.
+      bridge = undefined;
+      renderHud();
       showAppError(error);
     }
   });
   bridge.start();
-  state.set("EXCHANGING");
   showAppMessage("Exchange live. Enter Friend menu on the device.");
 }
 
-function tryAttachBridge(): void {
-  if (serial && socket?.readyState === WebSocket.OPEN && !bridge) attachBridge();
-}
-
-function closeBridge(): void {
-  bridge?.close();
-  bridge = undefined;
-}
-
 async function releaseSerial(): Promise<void> {
-  closeBridge();
-  const active = serial;
+  if (!serial) return;
+  const dyingSerial = serial;
+  bridge?.stop();
+  bridge = undefined;
   serial = undefined;
-  portEl.textContent = "none";
-  await active?.close().catch(() => undefined);
+  renderHud();
+  await dyingSerial.close().catch(() => undefined);
 }
+
+/**
+ * Single source of truth for the connection HUD. Reads the (serial, socket,
+ * role) triple and writes Dongle / Room / Role together. Called from every
+ * state-mutating handler so the HUD never lies.
+ */
+function renderHud(): void {
+  portEl.textContent = serial ? "connected" : "disconnected";
+  const isRoomLive = !!socket && socket.readyState <= WebSocket.OPEN;
+  roomEl.textContent = isRoomLive && currentRoom ? currentRoom : "none";
+  roleEl.textContent = isRoomLive && role ? role : "—";
+  const paired = !!serial && isRoomLive;
+  if (!paired) activityEl.textContent = "—";
+  else activityEl.textContent = (performance.now() - lastByteAt) < ACTIVITY_LIVE_MS ? "live" : "idle";
+}
+
+renderHud();
+// Activity flips back to "idle" after silence — needs a low-rate tick because
+// the event-driven renderHud calls only fire on state changes, not on the
+// passage of time. 1Hz is well below any noticeable cost (one DOM textContent
+// per second, ~microseconds of CPU, no GC pressure).
+setInterval(renderHud, 1000);
 
 function must<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = document.getElementById(id);

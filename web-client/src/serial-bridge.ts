@@ -15,6 +15,12 @@ export class SerialBridge {
   private messageHandler: ((event: MessageEvent) => void) | undefined;
   readonly stats: BridgeStats = { bytesIn: 0, bytesOut: 0 };
 
+  /** True once the bridge has been stopped, closed, or its serial pump
+   *  exited on error. A dead bridge knows it's dead. */
+  get isClosed(): boolean {
+    return this.closed;
+  }
+
   constructor(
     private readonly serial: Transport,
     private readonly ws: WebSocket,
@@ -70,7 +76,9 @@ export class SerialBridge {
           this.events.bytes?.("out", data, this.stats);
         }
       } catch (error) {
-        if (!this.closed) this.events.error?.(error);
+        const wasClosed = this.closed;
+        this.closed = true;
+        if (!wasClosed) this.events.error?.(error);
         return;
       }
     }

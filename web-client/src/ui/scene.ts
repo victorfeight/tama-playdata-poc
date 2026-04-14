@@ -69,33 +69,58 @@ export class Scene {
 
   mount(): void {
     this.drawer.clear();
-    this.localGhost = this.drawer.add(new Object2d({
-      img: "/sprites/ghost_01.png",
-      x: 150,
-      y: 218,
-      width: 176,
-      height: 176,
-      z: 2,
-      opacity: 0.48,
-      onDraw: (object) => {
-        object.y = 218 + Math.sin(performance.now() / 520) * 8;
-      }
-    }));
-    this.peerGhost = this.drawer.add(new Object2d({
-      img: "/sprites/ghost_01.png",
-      x: 474,
-      y: 218,
-      width: 176,
-      height: 176,
-      z: 2,
-      opacity: 0.48,
-      flipX: true,
-      onDraw: (object) => {
-        object.y = 218 + Math.sin(performance.now() / 520 + Math.PI * 0.35) * 8;
-      }
-    }));
+    this.localGhost = this.drawer.add(this.makeGhostPlaceholder("local"));
+    this.peerGhost = this.drawer.add(this.makeGhostPlaceholder("peer"));
     this.drawer.add(new Object2d({ x: 0, y: 0, width: 0, height: 0, opacity: 0, z: 3, onDraw: (_object, ctx) => this.drawHud(ctx) }));
     this.drawer.start();
+  }
+
+  private makeGhostPlaceholder(source: GhostPreview["source"]): Object2d {
+    const phaseOffset = source === "peer" ? Math.PI * 0.35 : 0;
+    const x = source === "local" ? 150 : 474;
+    return new Object2d({
+      img: "/sprites/ghost_01.png",
+      x,
+      y: 218,
+      width: 176,
+      height: 176,
+      z: 2,
+      opacity: 0.48,
+      flipX: source === "peer",
+      onDraw: (object) => {
+        object.y = 218 + Math.sin(performance.now() / 520 + phaseOffset) * 8;
+      }
+    });
+  }
+
+  private resetGhostSlot(source: GhostPreview["source"]): void {
+    const target = source === "local" ? this.localGhost : this.peerGhost;
+    if (!target) return;
+    target.canvas = undefined;
+    if (!target.image) {
+      target.image = new Image();
+      target.image.src = "/sprites/ghost_01.png";
+    }
+    target.opacity = 0.48;
+    target.width = 176;
+    target.height = 176;
+    target.x = source === "local" ? 150 : 474;
+    target.y = 218;
+    if (source === "local") this.localLabel = "your tama";
+    else this.peerLabel = "peer tama";
+  }
+
+  /**
+   * Reset all session-scoped visuals: both ghost slots back to placeholder,
+   * hearts and egg cleared. Call once whenever a new session begins so a
+   * stale bitmap from a previous session can never survive a failed parse.
+   */
+  beginSession(): void {
+    this.resetGhostSlot("local");
+    this.resetGhostSlot("peer");
+    this.friendship = undefined;
+    this.heartFill = undefined;
+    this.egg = undefined;
   }
 
   showGhost(source: GhostPreview["source"], rendered: CompositedGhost): void {
@@ -111,10 +136,6 @@ export class Scene {
 
     if (source === "local") this.localLabel = rendered.name;
     else this.peerLabel = rendered.name;
-
-    // A new playdate is starting (fresh ghost arriving). Clear the egg
-    // from any previous breeding so the scene resets cleanly.
-    this.egg = undefined;
   }
 
   setStatus(status: string): void {

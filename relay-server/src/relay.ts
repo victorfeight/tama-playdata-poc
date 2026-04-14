@@ -22,9 +22,12 @@ export class RelayHub {
 
   attach(code: string, role: Role, ws: WebSocket): void {
     const pair = this.pairs.get(code) ?? {};
-    if (pair[role]) {
-      ws.close(4409, "role already connected");
-      return;
+    // Evict any stale occupant for this role. Browser refresh races the new
+    // WS open against the old WS close — the new arrival is the user's
+    // current intent, so last-writer-wins.
+    const stale = pair[role];
+    if (stale) {
+      try { stale.ws.close(4001, "replaced by reconnect"); } catch { /* already dead */ }
     }
 
     pair[role] = { role, ws };
@@ -43,17 +46,22 @@ export class RelayHub {
       this.sessions.addBytes(code, role === "a" ? "ab" : "ba", bytes.length);
     });
 
-    ws.on("close", () => {
+    const onClose = () => {
       clearInterval(heartbeat);
-      const other = role === "a" ? pair.b : pair.a;
+      // If this ws was already evicted by a reconnecting peer, the slot now
+      // holds a different ws — leave it alone. Only the live occupant tears
+      // down the pair and notifies the other side.
+      const current = this.pairs.get(code);
+      if (!current || current[role]?.ws !== ws) return;
+      const other = role === "a" ? current.b : current.a;
       if (other?.ws.readyState === WebSocket.OPEN) other.ws.close(4000, "peer closed");
-      this.sessions.end(code, "closed");
+      // Tear down the in-memory pair so a fresh rejoin gets a clean slot,
+      // but DO NOT mark the session ended — it stays rejoin-eligible until
+      // SessionStore.expire() retires it on TTL.
       this.pairs.delete(code);
-    });
-
-    ws.on("error", () => {
-      this.sessions.end(code, "error");
-    });
+    };
+    ws.on("close", onClose);
+    ws.on("error", onClose);
   }
 
   activeCount(code: string): number {
