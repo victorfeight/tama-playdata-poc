@@ -121,9 +121,18 @@ const BY_ID: ReadonlyMap<number, CharacterEntry> = new Map(
   CHARACTERS.map((c) => [c.id, c])
 );
 
+const BY_NAME: ReadonlyMap<string, CharacterEntry> = new Map(
+  CHARACTERS.map((c) => [c.name.toUpperCase(), c])
+);
+
 /** Look up a character by its Paradise ID (0 if unknown returns undefined). */
 export function getCharacter(id: number): CharacterEntry | undefined {
   return BY_ID.get(id);
+}
+
+/** Look up a character by its name (case-insensitive). */
+export function getCharacterByName(name: string): CharacterEntry | undefined {
+  return BY_NAME.get(name.toUpperCase());
 }
 
 /** Convenience: the eye/mouth offsets in pixels, or (0,0) if the id is unknown. */

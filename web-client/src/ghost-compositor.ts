@@ -6,14 +6,24 @@
 // pre-rendered PNGs, no charaId → filename lookup; whatever sprite pixels
 // came over the wire is what we paint.
 
-import { getCharacter, renderGhost, GhostRender, GhostSpritePart, RgbaImage } from "@tama-breed-poc/tama-protocol";
+import { getCharacter, getCharacterByName, renderGhost, GhostRender, GhostSpritePart, RgbaImage } from "@tama-breed-poc/tama-protocol";
 import { GhostPreview } from "./ghost-preview";
 
-// Pick the character ID that drives positioning. For jade/bred/custom ghosts
-// the charaId may differ from eyeCharaId - when they differ, eyeCharaId is
-// the real character identity. Matches TamaParadise's resolveBodyId semantics.
+// Pick the character ID that drives positioning. For jade / lab ghosts the
+// bin's charaId is the template (4017 = BBMarutchi); the real identity is in
+// eyeCharaId. For BRED ghosts, the name encodes the BODY character while
+// eyeCharaId is the EYE character - use body for positioning.
 function positionCharaId(rendered: GhostRender): number {
-  if (rendered.charaId !== rendered.eyeCharaId) return rendered.eyeCharaId;
+  if (rendered.charaId === 4017) {
+    // Template ghost - check if BRED (name's character differs from eyeCharaId)
+    const bodyFromName = getCharacterByName(rendered.name);
+    if (bodyFromName && bodyFromName.id !== rendered.eyeCharaId) {
+      // BRED ghost - use body character (from name) for positioning
+      return bodyFromName.id;
+    }
+    // JADE ghost - body and eyes are same character
+    return rendered.eyeCharaId;
+  }
   return rendered.charaId;
 }
 
