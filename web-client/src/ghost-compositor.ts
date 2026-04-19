@@ -9,11 +9,11 @@
 import { getCharacter, renderGhost, GhostRender, GhostSpritePart, RgbaImage } from "@tama-breed-poc/tama-protocol";
 import { GhostPreview } from "./ghost-preview";
 
-// Pick the character ID that drives positioning. For jade / lab ghosts the
-// bin's charaId is the template (4017 = BBMarutchi); the real identity is in
-// eyeCharaId. Matches TamaParadise's resolveBodyId semantics.
+// Pick the character ID that drives positioning. For jade/bred/custom ghosts
+// the charaId may differ from eyeCharaId - when they differ, eyeCharaId is
+// the real character identity. Matches TamaParadise's resolveBodyId semantics.
 function positionCharaId(rendered: GhostRender): number {
-  if (rendered.charaId === 4017 && rendered.eyeCharaId !== 4017) return rendered.eyeCharaId;
+  if (rendered.charaId !== rendered.eyeCharaId) return rendered.eyeCharaId;
   return rendered.charaId;
 }
 

@@ -112,7 +112,7 @@ export function parseGhost(data: Uint8Array): ParsedGhost {
     validChecksum: u32(view, 0x00) === checksum && u32(view, 0x04) === complement,
     calculatedChecksum: checksum,
     calculatedComplement: complement,
-    actualCharaId: charaId === 4017 && eyeCharaId !== 4017 ? eyeCharaId : charaId,
+    actualCharaId: charaId !== eyeCharaId ? eyeCharaId : charaId,
     isBred: charaId !== eyeCharaId || color !== 0xff
   };
 }
