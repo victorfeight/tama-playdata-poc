@@ -41,7 +41,7 @@ export enum PlayType {
   BREED = 4
 }
 
-export const PARADISE_BAUD_RATE = 230400; // TEST: was 460800
+export const PARADISE_BAUD_RATE = 460800;
 export const SERIAL_DATA_BITS = 8;
 export const SERIAL_STOP_BITS = 1;
 export const SERIAL_PARITY = "none" as const;
