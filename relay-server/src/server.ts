@@ -24,7 +24,18 @@ export async function buildServer(config: Config) {
     max: 10,
     timeWindow: "1 minute"
   });
-  await app.register(websocket);
+  await app.register(websocket, {
+    options: {
+      // The token rides in Sec-WebSocket-Protocol (see /ws handler below).
+      // The browser requires the server to echo back the chosen subprotocol
+      // or it rejects the upgrade — so we accept whatever the client sent.
+      // Validation of the token happens in the route handler.
+      handleProtocols: (protocols: Set<string>) => {
+        const first = protocols.values().next().value;
+        return first ?? false;
+      }
+    }
+  });
 
   app.addHook("onClose", async () => {
     db.close();
@@ -61,10 +72,13 @@ export async function buildServer(config: Config) {
     return reply.send({ token: row.token, app: row.app });
   });
 
-  app.get<{ Params: { code: string }; Querystring: { role?: Role; token?: string } }>("/ws/:code", { websocket: true }, (connection, request) => {
+  app.get<{ Params: { code: string }; Querystring: { role?: Role } }>("/ws/:code", { websocket: true }, (connection, request) => {
     const { code } = request.params;
     const role = request.query.role;
-    const token = pickHeader(request.headers["x-poc-token"]) ?? request.query.token;
+    // Token rides in Sec-WebSocket-Protocol (subprotocol smuggling, per the
+    // SO/WICG community pattern for browser WS auth). Keeps the token out of
+    // request URLs and therefore out of nginx access logs and journald.
+    const token = pickFirstSubprotocol(request.headers["sec-websocket-protocol"]);
     const ws = connection as unknown as WebSocket;
 
     if (role !== "a" && role !== "b") {
@@ -97,4 +111,13 @@ export async function buildServer(config: Config) {
 function pickHeader(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) return value[0];
   return value;
+}
+
+/** Sec-WebSocket-Protocol is a comma-separated list. The client sends
+ *  exactly one entry (the token) but headers split across multiple lines
+ *  can also arrive as an array. Take the first non-empty value. */
+function pickFirstSubprotocol(value: string | string[] | undefined): string | undefined {
+  const raw = Array.isArray(value) ? value.join(",") : value;
+  if (!raw) return undefined;
+  return raw.split(",").map((s) => s.trim()).find((s) => s.length > 0);
 }

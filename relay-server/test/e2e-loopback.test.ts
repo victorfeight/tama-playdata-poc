@@ -53,7 +53,8 @@ describe("relay server", () => {
 });
 
 function connect(port: number, code: string, role: "a" | "b", token: string): WebSocket {
-  return new WebSocket(`ws://127.0.0.1:${port}/ws/${code}?role=${role}&token=${token}`);
+  // Token rides in Sec-WebSocket-Protocol (subprotocol smuggling).
+  return new WebSocket(`ws://127.0.0.1:${port}/ws/${code}?role=${role}`, token);
 }
 
 function opened(ws: WebSocket): Promise<void> {

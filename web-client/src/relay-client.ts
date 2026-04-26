@@ -40,8 +40,10 @@ export class RelayClient {
   connect(code: string, role: "a" | "b", token: string): WebSocket {
     const url = new URL(`/ws/${code}`, this.options.baseUrl.replace(/^http/, "ws"));
     url.searchParams.set("role", role);
-    url.searchParams.set("token", token);
-    const socket = new WebSocket(url);
+    // Token rides in Sec-WebSocket-Protocol (subprotocol smuggling). Keeps
+    // the token out of the URL, so it stays out of nginx access logs,
+    // browser DevTools URL history, and any HTTP-recording proxy in between.
+    const socket = new WebSocket(url, token);
     socket.binaryType = "arraybuffer";
     return socket;
   }
