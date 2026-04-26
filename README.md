@@ -49,7 +49,7 @@ Terminal 2:
 
 ```bash
 cd /home/vic/Documents/SITE_LATEST/tama-breed-poc
-VITE_RELAY_URL=http://localhost:3001 VITE_RELAY_SECRET=dev-only pnpm dev:web
+VITE_RELAY_URL=http://localhost:3001 pnpm dev:web
 ```
 
 Browser:
@@ -104,7 +104,7 @@ The local hardware note lists CH340C and CP2102 as compatible starting points, w
 ## Troubleshooting
 
 - WebSerial only works in Chromium-family browsers on secure origins or `localhost`.
-- If room creation returns `401`, align `SHARED_SECRET` on the relay and `VITE_RELAY_SECRET` in the web client. Browser WebSocket cannot set custom headers, so WS auth uses `?secret=` while Node tools may still use `x-poc-secret`.
+- Auth uses **per-session tokens** issued at `POST /sessions` (host) and `POST /sessions/:code/join` (guest). The 6-char room code is the join gate; the token is the WS-upgrade credential. Bundle no longer carries any auth secret.
 - If the device does not respond, verify the dongle is in Paradise Friend/Playdate mode and configured at `460800`, `8N1`, no flow control.
 - If ghost parsing does not update, capture the raw byte log first; incoming bytes may still be encrypted/chunked until the TCPComm adapter is completed.
 

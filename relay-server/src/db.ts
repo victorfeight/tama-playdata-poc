@@ -30,4 +30,19 @@ export function migrate(db: Db): void {
     CREATE INDEX IF NOT EXISTS sessions_code_idx ON sessions(code);
     CREATE INDEX IF NOT EXISTS sessions_created_idx ON sessions(created_at);
   `);
+  // Per-session token — the WS-upgrade credential. One token per session
+  // (the 6-char code remains the join gate; the token is the proof that
+  // you know the code). Added idempotently — sqlite has no
+  // ADD COLUMN IF NOT EXISTS.
+  addColumnIfMissing(db, "sessions", "token", "TEXT");
+  // Tenant tag — claimed by the creator (e.g. "playdate-web", "tamahome-desktop").
+  // Lets us partition logs / rate limits / metrics per app without separate
+  // relay deployments.
+  addColumnIfMissing(db, "sessions", "app", "TEXT");
+}
+
+function addColumnIfMissing(db: Db, table: string, column: string, type: string): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (cols.some((c) => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
 }

@@ -283,7 +283,7 @@ const bytesOutEl = must("bytes-out");
 let lastByteAt = 0;
 const ACTIVITY_LIVE_MS = 2000;
 const codeInput = must<HTMLInputElement>("room-code");
-const relay = new RelayClient({ baseUrl: config.relayUrl, secret: config.relaySecret });
+const relay = new RelayClient({ baseUrl: config.relayUrl, appName: "playdate-web" });
 
 // USB unplug funnels into the same recovery path as a manual click.
 navigator.serial?.addEventListener("disconnect", (event) => {
@@ -320,12 +320,12 @@ must<HTMLButtonElement>("create-room").addEventListener("click", async () => {
   }
   try {
     await dropExistingSocket();
-    const code = await relay.createRoom();
+    const { code, token } = await relay.createRoom();
     codeInput.value = code;
     currentRoom = code;
     lastRoom = code;
     role = "host";
-    await connectWs(code, "a");
+    await connectWs(code, "a", token);
   } catch (error) {
     showAppError(error);
   }
@@ -349,7 +349,13 @@ must<HTMLButtonElement>("join-room").addEventListener("click", async () => {
     if (code !== lastRoom) role = "guest";
     currentRoom = code;
     lastRoom = code;
-    await connectWs(code, role === "host" ? "a" : "b");
+    const wsRole = role === "host" ? "a" : "b";
+    // Knowing the 6-char code is the gate to fetch the token. Server
+    // returns the same token across repeated calls (idempotent), so a
+    // sticky-rejoin after a peer-refresh kick re-auths cleanly without
+    // ever asking the user for more than the room code.
+    const token = await relay.fetchToken(code);
+    await connectWs(code, wsRole, token);
   } catch (error) {
     showAppError(error);
   }
@@ -364,8 +370,8 @@ async function dropExistingSocket(): Promise<void> {
   await done;
 }
 
-async function connectWs(code: string, wsRole: "a" | "b"): Promise<void> {
-  const ws = relay.connect(code, wsRole);
+async function connectWs(code: string, wsRole: "a" | "b", token: string): Promise<void> {
+  const ws = relay.connect(code, wsRole, token);
   socket = ws;
   // Capture the socket reference so a stale close event from a previously
   // dropped socket can't clobber a freshly assigned one (Bug 3a).

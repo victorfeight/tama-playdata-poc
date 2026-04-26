@@ -17,7 +17,7 @@ export async function buildServer(config: Config) {
   await app.register(cors, {
     origin: true,
     credentials: true,
-    allowedHeaders: ["content-type", "x-poc-secret"],
+    allowedHeaders: ["content-type", "x-app-name"],
     methods: ["GET", "POST", "OPTIONS"]
   });
   await app.register(rateLimit, {
@@ -32,24 +32,41 @@ export async function buildServer(config: Config) {
 
   app.get("/health", async () => ({ ok: true }));
 
+  // Create a fresh room. Host gets back {code, token}. Anonymous create is
+  // intentional — rate-limit + Cloudflare-only UFW are the protection
+  // against spam, not a bundled secret. Knowing the 6-char code is the
+  // gate to fetch the token; the token is the WS-upgrade credential.
   app.post("/sessions", async (request, reply) => {
-    if (!isAuthorized(request.headers["x-poc-secret"], config.sharedSecret)) {
-      return reply.code(401).send({ error: "unauthorized" });
-    }
-    const row = sessions.create();
-    return reply.code(201).send({ code: row.code, ttlMs: config.sessionTtlMs });
+    const appName = pickHeader(request.headers["x-app-name"]);
+    const row = sessions.create(appName);
+    return reply.code(201).send({
+      code: row.code,
+      token: row.token,
+      app: row.app,
+      ttlMs: config.sessionTtlMs
+    });
   });
 
-  app.get<{ Params: { code: string }; Querystring: { role?: Role; secret?: string } }>("/ws/:code", { websocket: true }, (connection, request) => {
+  // Guest pickup: returns the session's token. Idempotent — knowing the
+  // 6-char code is the gate, the token is just the server-issued credential
+  // the WS upgrade will check. Same value across calls so peer-refresh-
+  // rejoin works without churn.
+  app.post<{ Params: { code: string } }>("/sessions/:code/join", async (request, reply) => {
+    sessions.expire();
+    const { code } = request.params;
+    const row = sessions.get(code);
+    if (!row || !sessions.isActive(row) || !row.token) {
+      return reply.code(404).send({ error: "session not found" });
+    }
+    return reply.send({ token: row.token, app: row.app });
+  });
+
+  app.get<{ Params: { code: string }; Querystring: { role?: Role; token?: string } }>("/ws/:code", { websocket: true }, (connection, request) => {
     const { code } = request.params;
     const role = request.query.role;
-    const secret = request.headers["x-poc-secret"] ?? request.query.secret;
+    const token = pickHeader(request.headers["x-poc-token"]) ?? request.query.token;
     const ws = connection as unknown as WebSocket;
 
-    if (!isAuthorized(secret, config.sharedSecret)) {
-      ws.close(4401, "unauthorized");
-      return;
-    }
     if (role !== "a" && role !== "b") {
       ws.close(4400, "role must be a or b");
       return;
@@ -59,6 +76,10 @@ export async function buildServer(config: Config) {
     const row = sessions.get(code);
     if (!row || !sessions.isActive(row)) {
       ws.close(4404, "session not found");
+      return;
+    }
+    if (!sessions.validateToken(code, token)) {
+      ws.close(4401, "unauthorized");
       return;
     }
     if (relay.activeCount(code) >= 2) {
@@ -73,6 +94,7 @@ export async function buildServer(config: Config) {
   return app;
 }
 
-function isAuthorized(value: string | string[] | undefined, expected: string): boolean {
-  return (Array.isArray(value) ? value[0] : value) === expected;
+function pickHeader(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
 }

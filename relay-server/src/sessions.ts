@@ -15,6 +15,8 @@ export interface SessionRow {
   ip_b: string | null;
   ua_a: string | null;
   ua_b: string | null;
+  token: string | null;
+  app: string | null;
 }
 
 export class SessionStore {
@@ -23,19 +25,31 @@ export class SessionStore {
     private readonly ttlMs: number
   ) {}
 
-  create(now = Date.now()): SessionRow {
+  create(app: string | null = null, now = Date.now()): SessionRow {
     this.expire(now);
     for (let attempt = 0; attempt < 10; attempt += 1) {
       const code = crypto.randomBytes(4).toString("base64url").replace(/[^a-zA-Z0-9]/g, "").slice(0, 6).toUpperCase();
       if (code.length !== 6) continue;
       try {
-        this.db.prepare("INSERT INTO sessions (code, created_at) VALUES (?, ?)").run(code, now);
+        const token = generateToken();
+        this.db
+          .prepare("INSERT INTO sessions (code, created_at, token, app) VALUES (?, ?, ?, ?)")
+          .run(code, now, token, app);
         return this.get(code) as SessionRow;
       } catch {
         // Retry rare code collision.
       }
     }
     throw new Error("unable to allocate session code");
+  }
+
+  /** True if the supplied token matches the session's token. The 6-char code
+   *  is the gate to fetch this token; once held it's good for either role
+   *  slot in the session for the duration of the TTL. */
+  validateToken(code: string, token: string | undefined): boolean {
+    if (!token) return false;
+    const row = this.get(code);
+    return !!row && row.token !== null && row.token === token;
   }
 
   get(code: string): SessionRow | undefined {
@@ -67,4 +81,9 @@ export class SessionStore {
   isActive(row: SessionRow, now = Date.now()): boolean {
     return row.ended_at === null && row.created_at >= now - this.ttlMs;
   }
+}
+
+/** 32-byte random hex (64 chars), cryptographically unique per row. */
+function generateToken(): string {
+  return crypto.randomBytes(32).toString("hex");
 }
