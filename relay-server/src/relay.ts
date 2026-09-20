@@ -9,6 +9,9 @@ interface Peer {
 interface Pair {
   a?: Peer | undefined;
   b?: Peer | undefined;
+  pendingAb: number;
+  pendingBa: number;
+  flushTimer: ReturnType<typeof setInterval>;
 }
 
 // Pure byte pipe. Any gating / holding / role-asymmetry introduced more
@@ -17,11 +20,21 @@ interface Pair {
 export class RelayHub {
   private readonly pairs = new Map<string, Pair>();
   private readonly heartbeatMs = 25_000;
+  private readonly counterFlushMs = 1_000;
 
   constructor(private readonly sessions: SessionStore) {}
 
   attach(code: string, role: Role, ws: WebSocket): void {
-    const pair = this.pairs.get(code) ?? {};
+    let pair = this.pairs.get(code);
+    if (!pair) {
+      pair = {
+        pendingAb: 0,
+        pendingBa: 0,
+        flushTimer: setInterval(() => this.flushCounters(code, pair!), this.counterFlushMs)
+      };
+      pair.flushTimer.unref();
+      this.pairs.set(code, pair);
+    }
     // Evict any stale occupant for this role. Browser refresh races the new
     // WS open against the old WS close — the new arrival is the user's
     // current intent, so last-writer-wins.
@@ -39,11 +52,13 @@ export class RelayHub {
     }, this.heartbeatMs);
 
     ws.on("message", (data) => {
+      if (this.pairs.get(code) !== pair || pair[role]?.ws !== ws) return;
       const other = role === "a" ? pair.b : pair.a;
       if (!other || other.ws.readyState !== WebSocket.OPEN) return;
       const bytes = toBuffer(data);
       other.ws.send(bytes);
-      this.sessions.addBytes(code, role === "a" ? "ab" : "ba", bytes.length);
+      if (role === "a") pair.pendingAb += bytes.length;
+      else pair.pendingBa += bytes.length;
     });
 
     const onClose = () => {
@@ -53,6 +68,8 @@ export class RelayHub {
       // down the pair and notifies the other side.
       const current = this.pairs.get(code);
       if (!current || current[role]?.ws !== ws) return;
+      clearInterval(current.flushTimer);
+      this.flushCounters(code, current);
       const other = role === "a" ? current.b : current.a;
       if (other?.ws.readyState === WebSocket.OPEN) other.ws.close(4000, "peer closed");
       // Tear down the in-memory pair so a fresh rejoin gets a clean slot,
@@ -67,6 +84,14 @@ export class RelayHub {
   activeCount(code: string): number {
     const pair = this.pairs.get(code);
     return Number(Boolean(pair?.a)) + Number(Boolean(pair?.b));
+  }
+
+  private flushCounters(code: string, pair: Pair): void {
+    const { pendingAb, pendingBa } = pair;
+    if (pendingAb === 0 && pendingBa === 0) return;
+    this.sessions.addBytes(code, pendingAb, pendingBa);
+    pair.pendingAb = 0;
+    pair.pendingBa = 0;
   }
 }
 

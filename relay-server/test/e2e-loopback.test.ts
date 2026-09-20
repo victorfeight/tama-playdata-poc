@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import { buildServer } from "../src/server";
+import { openDb } from "../src/db";
 
 let closeServer: undefined | (() => Promise<void>);
 
@@ -47,7 +48,13 @@ describe("relay server", () => {
     b.send(Buffer.from([4, 5, 6]));
     expect([...new Uint8Array(await gotAtA)]).toEqual([4, 5, 6]);
 
+    const aClosed = closed(a);
     a.close();
+    await aClosed;
+    const db = openDb(path.join(dir, "sessions.db"));
+    const counts = db.prepare("SELECT bytes_ab, bytes_ba FROM sessions WHERE code = ?").get(code) as { bytes_ab: number; bytes_ba: number };
+    expect(counts).toEqual({ bytes_ab: 3, bytes_ba: 3 });
+    db.close();
     b.close();
   });
 });
@@ -62,6 +69,10 @@ function opened(ws: WebSocket): Promise<void> {
     ws.once("open", resolve);
     ws.once("error", reject);
   });
+}
+
+function closed(ws: WebSocket): Promise<void> {
+  return new Promise((resolve) => ws.once("close", resolve));
 }
 
 function onceBinaryMessage(ws: WebSocket): Promise<ArrayBuffer> {

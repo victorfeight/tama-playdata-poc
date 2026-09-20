@@ -1,4 +1,5 @@
 import { Transport } from "@tama-breed-poc/tama-protocol";
+import { SerialBatcher } from "./serial-batcher";
 
 export interface BridgeStats {
   bytesIn: number;
@@ -13,6 +14,7 @@ export interface SerialBridgeEvents {
 export class SerialBridge {
   private closed = false;
   private messageHandler: ((event: MessageEvent) => void) | undefined;
+  private readonly serialBatcher: SerialBatcher;
   readonly stats: BridgeStats = { bytesIn: 0, bytesOut: 0 };
 
   /** True once the bridge has been stopped, closed, or its serial pump
@@ -27,6 +29,12 @@ export class SerialBridge {
     private readonly events: SerialBridgeEvents = {}
   ) {
     this.ws.binaryType = "arraybuffer";
+    this.serialBatcher = new SerialBatcher((data) => {
+      if (this.closed || this.ws.readyState !== WebSocket.OPEN) return;
+      this.ws.send(data);
+      this.stats.bytesOut += data.length;
+      this.events.bytes?.("out", data, this.stats);
+    });
   }
 
   start(): void {
@@ -40,6 +48,7 @@ export class SerialBridge {
 
   stop(): void {
     this.closed = true;
+    this.serialBatcher.discard();
     if (this.messageHandler) {
       this.ws.removeEventListener("message", this.messageHandler);
       this.messageHandler = undefined;
@@ -70,11 +79,7 @@ export class SerialBridge {
       try {
         const data = await this.serial.read();
         if (this.closed || !data.length) continue;
-        if (this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(data);
-          this.stats.bytesOut += data.length;
-          this.events.bytes?.("out", data, this.stats);
-        }
+        if (this.ws.readyState === WebSocket.OPEN) this.serialBatcher.push(data);
       } catch (error) {
         const wasClosed = this.closed;
         this.closed = true;

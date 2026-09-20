@@ -62,9 +62,10 @@ export class SessionStore {
     this.db.prepare(`UPDATE sessions SET ${ipColumn} = ?, ${uaColumn} = ? WHERE code = ?`).run(ip, ua, code);
   }
 
-  addBytes(code: string, direction: "ab" | "ba", bytes: number): void {
-    const column = direction === "ab" ? "bytes_ab" : "bytes_ba";
-    this.db.prepare(`UPDATE sessions SET ${column} = ${column} + ? WHERE code = ?`).run(bytes, code);
+  addBytes(code: string, bytesAb: number, bytesBa: number): void {
+    if (!this.db.open || (bytesAb === 0 && bytesBa === 0)) return;
+    this.db.prepare("UPDATE sessions SET bytes_ab = bytes_ab + ?, bytes_ba = bytes_ba + ? WHERE code = ?")
+      .run(bytesAb, bytesBa, code);
   }
 
   end(code: string, outcome: string, now = Date.now()): void {
