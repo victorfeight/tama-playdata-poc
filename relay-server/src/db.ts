@@ -39,6 +39,9 @@ export function migrate(db: Db): void {
   // Lets us partition logs / rate limits / metrics per app without separate
   // relay deployments.
   addColumnIfMissing(db, "sessions", "app", "TEXT");
+  // Older rooms keep their original creation-based deadline until they are
+  // touched by a new connection. New rooms use this for idle expiry.
+  addColumnIfMissing(db, "sessions", "last_active_at", "INTEGER");
 }
 
 function addColumnIfMissing(db: Db, table: string, column: string, type: string): void {

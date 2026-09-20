@@ -11,6 +11,7 @@ interface Pair {
   b?: Peer | undefined;
   pendingAb: number;
   pendingBa: number;
+  lastTouchAt: number;
   flushTimer: ReturnType<typeof setInterval>;
 }
 
@@ -30,6 +31,7 @@ export class RelayHub {
       pair = {
         pendingAb: 0,
         pendingBa: 0,
+        lastTouchAt: Date.now(),
         flushTimer: setInterval(() => this.flushCounters(code, pair!), this.counterFlushMs)
       };
       pair.flushTimer.unref();
@@ -44,6 +46,8 @@ export class RelayHub {
     }
 
     pair[role] = { role, ws };
+    this.sessions.touch(code);
+    pair.lastTouchAt = Date.now();
     this.pairs.set(code, pair);
     const other = role === "a" ? pair.b : pair.a;
     if (other?.ws.readyState === WebSocket.OPEN) {
@@ -72,6 +76,8 @@ export class RelayHub {
       const current = this.pairs.get(code);
       if (!current || current[role]?.ws !== ws) return;
       current[role] = undefined;
+      this.sessions.touch(code);
+      current.lastTouchAt = Date.now();
       const other = role === "a" ? current.b : current.a;
       if (other?.ws.readyState === WebSocket.OPEN) other.ws.send("peer disconnected");
       if (!current.a && !current.b) {
@@ -94,6 +100,13 @@ export class RelayHub {
   }
 
   private flushCounters(code: string, pair: Pair): void {
+    if (pair.a || pair.b) {
+      const now = Date.now();
+      if (now - pair.lastTouchAt >= 60_000) {
+        this.sessions.touch(code, now);
+        pair.lastTouchAt = now;
+      }
+    }
     const { pendingAb, pendingBa } = pair;
     if (pendingAb === 0 && pendingBa === 0) return;
     this.sessions.addBytes(code, pendingAb, pendingBa);

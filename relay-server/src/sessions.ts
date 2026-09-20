@@ -7,6 +7,7 @@ export interface SessionRow {
   id: number;
   code: string;
   created_at: number;
+  last_active_at: number | null;
   ended_at: number | null;
   outcome: string | null;
   bytes_ab: number;
@@ -33,8 +34,8 @@ export class SessionStore {
       try {
         const token = generateToken();
         this.db
-          .prepare("INSERT INTO sessions (code, created_at, token, app) VALUES (?, ?, ?, ?)")
-          .run(code, now, token, app);
+          .prepare("INSERT INTO sessions (code, created_at, last_active_at, token, app) VALUES (?, ?, ?, ?, ?)")
+          .run(code, now, now, token, app);
         return this.get(code) as SessionRow;
       } catch {
         // Retry rare code collision.
@@ -45,7 +46,7 @@ export class SessionStore {
 
   /** True if the supplied token matches the session's token. The 6-char code
    *  is the gate to fetch this token; once held it's good for either role
-   *  slot in the session for the duration of the TTL. */
+   *  slot in the session until the room has been idle for the TTL. */
   validateToken(code: string, token: string | undefined): boolean {
     if (!token) return false;
     const row = this.get(code);
@@ -62,6 +63,10 @@ export class SessionStore {
     this.db.prepare(`UPDATE sessions SET ${ipColumn} = ?, ${uaColumn} = ? WHERE code = ?`).run(ip, ua, code);
   }
 
+  touch(code: string, now = Date.now()): void {
+    this.db.prepare("UPDATE sessions SET last_active_at = ? WHERE code = ? AND ended_at IS NULL").run(now, code);
+  }
+
   addBytes(code: string, bytesAb: number, bytesBa: number): void {
     if (!this.db.open || (bytesAb === 0 && bytesBa === 0)) return;
     this.db.prepare("UPDATE sessions SET bytes_ab = bytes_ab + ?, bytes_ba = bytes_ba + ? WHERE code = ?")
@@ -75,12 +80,12 @@ export class SessionStore {
 
   expire(now = Date.now()): void {
     this.db
-      .prepare("UPDATE sessions SET ended_at = ?, outcome = 'expired' WHERE ended_at IS NULL AND created_at < ?")
+      .prepare("UPDATE sessions SET ended_at = ?, outcome = 'expired' WHERE ended_at IS NULL AND COALESCE(last_active_at, created_at) < ?")
       .run(now, now - this.ttlMs);
   }
 
   isActive(row: SessionRow, now = Date.now()): boolean {
-    return row.ended_at === null && row.created_at >= now - this.ttlMs;
+    return row.ended_at === null && (row.last_active_at ?? row.created_at) >= now - this.ttlMs;
   }
 }
 
