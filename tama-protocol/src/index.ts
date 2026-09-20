@@ -3,6 +3,7 @@ export * from "./crc";
 export * from "./framing";
 export * from "./ghost";
 export * from "./ghost-name";
+export * from "./ghost-placement";
 export * from "./ghost-render";
 export * from "./packets";
 export * from "./paradise-chars";
