@@ -14,5 +14,6 @@ export * from "./tcp-crypto";
 export * from "./tcp-observer";
 export * from "./transport";
 export * from "./transport-webserial";
+export * from "./transport/webusb-port";
 export * from "./transport-websocket";
 export * from "./types";

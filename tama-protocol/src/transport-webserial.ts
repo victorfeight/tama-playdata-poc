@@ -1,17 +1,14 @@
 import { DEFAULT_SERIAL_OPTIONS, SerialOpenOptions, Transport, withTimeout } from "./transport";
+import type { BrowserSerialPort } from "./transport/browser-serial-port";
+import { requestWebUsbSerialPort } from "./transport/webusb-serial";
+import type { UsbDeviceFilterLike, UsbDeviceLike } from "./transport/webusb-types";
 
 // Per the W3C WebSerial spec, SerialPort.getInfo() returns only
 // { usbVendorId, usbProductId } -- no friendly name by design (privacy).
 // We surface the VID:PID hex pair and leave chip identification to the user.
 type SerialPortInfo = { usbVendorId?: number; usbProductId?: number };
 
-type SerialPortLike = {
-  readable: ReadableStream<Uint8Array> | null;
-  writable: WritableStream<Uint8Array> | null;
-  open(options: { baudRate: number; dataBits: 8; stopBits: 1; parity: "none"; flowControl: "none" }): Promise<void>;
-  close(): Promise<void>;
-  getInfo?(): SerialPortInfo;
-};
+type SerialPortLike = BrowserSerialPort;
 
 export interface PortInfo {
   usbVendorId?: number;
@@ -110,10 +107,23 @@ export class WebSerialTransport implements Transport {
 }
 
 export async function requestParadiseSerialPort(): Promise<WebSerialTransport> {
-  const serial = navigator.serial;
-  if (!serial) throw new Error("WebSerial is unavailable. Use Chrome or Edge over HTTPS/localhost.");
-  const port = await serial.requestPort();
-  return new WebSerialTransport(port as SerialPortLike);
+  // Android Chrome exposes supported wired adapters through WebUSB. On desktop,
+  // prefer the operating system's serial driver and use WebUSB as a fallback.
+  let port: SerialPortLike;
+  if (/Android/i.test(navigator.userAgent) && navigator.usb) {
+    port = await requestWebUsbSerialPort(navigator.usb);
+  } else if (navigator.serial) {
+    port = await navigator.serial.requestPort() as SerialPortLike;
+  } else if (navigator.usb) {
+    port = await requestWebUsbSerialPort(navigator.usb);
+  } else {
+    throw new Error("This browser does not provide WebSerial or WebUSB.");
+  }
+  return new WebSerialTransport(port);
+}
+
+export function hasParadiseSerial(): boolean {
+  return Boolean(navigator.serial || navigator.usb);
 }
 
 declare global {
@@ -123,6 +133,12 @@ declare global {
       getPorts(): Promise<unknown[]>;
       addEventListener(type: "connect" | "disconnect", listener: (event: Event & { target: SerialPortLike }) => void): void;
       removeEventListener(type: "connect" | "disconnect", listener: (event: Event & { target: SerialPortLike }) => void): void;
+    };
+    usb?: {
+      requestDevice(options: { filters: ReadonlyArray<UsbDeviceFilterLike> }): Promise<UsbDeviceLike>;
+      getDevices(): Promise<unknown[]>;
+      addEventListener(type: "connect" | "disconnect", listener: (event: Event & { device: UsbDeviceLike }) => void): void;
+      removeEventListener(type: "connect" | "disconnect", listener: (event: Event & { device: UsbDeviceLike }) => void): void;
     };
   }
 }

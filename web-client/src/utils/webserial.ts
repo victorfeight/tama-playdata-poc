@@ -1,4 +1,4 @@
-import { requestParadiseSerialPort, WebSerialTransport } from "@tama-breed-poc/tama-protocol";
+import { hasParadiseSerial, requestParadiseSerialPort, WebSerialTransport } from "@tama-breed-poc/tama-protocol";
 
 export async function connectDongle(): Promise<WebSerialTransport> {
   const transport = await requestParadiseSerialPort();
@@ -6,6 +6,4 @@ export async function connectDongle(): Promise<WebSerialTransport> {
   return transport;
 }
 
-export function hasWebSerial(): boolean {
-  return Boolean(navigator.serial);
-}
+export { hasParadiseSerial };

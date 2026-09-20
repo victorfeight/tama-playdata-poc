@@ -504,16 +504,15 @@ REMOTE
 
 ## 14. Build web-client with production env
 
-Vite bakes `VITE_*` env vars into the bundle at build time, so we must rebuild
-whenever the URL or shared secret changes.
+Vite bakes `VITE_*` env vars into the bundle at build time, so rebuild when
+the relay URL changes. Current per-session WebSocket tokens are not build-time
+secrets.
 
 ```bash
 ssh playdate 'bash -s' <<'REMOTE'
 set -e
-RELAY_SECRET=$(grep '^SHARED_SECRET=' /srv/playdate/relay-server/.env | cut -d= -f2-)
 cd /srv/playdate/web-client
 export VITE_RELAY_URL=https://playdate.bbamorachi.us
-export VITE_RELAY_SECRET="$RELAY_SECRET"
 pnpm build
 ls -lh dist
 REMOTE
@@ -667,13 +666,11 @@ git push origin main
 ```bash
 ssh playdate 'set -e
 cd /srv/playdate
-git pull
+git pull --ff-only
 pnpm install --frozen-lockfile
 # tama-protocol must build first so its .d.ts exists for web-client TS to compile
 pnpm --filter @tama-breed-poc/tama-protocol build
-RELAY_SECRET=$(grep ^SHARED_SECRET= relay-server/.env | cut -d= -f2-)
 VITE_RELAY_URL=https://playdate.bbamorachi.us \
-VITE_RELAY_SECRET=$RELAY_SECRET \
 pnpm --filter @tama-breed-poc/web-client build
 sudo systemctl restart playdate-relay
 sleep 2
@@ -693,11 +690,9 @@ ssh playdate 'sudo systemctl restart playdate-relay && \
 ```bash
 ssh playdate 'set -e
 cd /srv/playdate
-git pull
+git pull --ff-only
 pnpm --filter @tama-breed-poc/tama-protocol build
-RELAY_SECRET=$(grep ^SHARED_SECRET= relay-server/.env | cut -d= -f2-)
 VITE_RELAY_URL=https://playdate.bbamorachi.us \
-VITE_RELAY_SECRET=$RELAY_SECRET \
 pnpm --filter @tama-breed-poc/web-client build
 '
 ```
@@ -769,8 +764,7 @@ rsync -az --delete \
 
 ssh playdate 'cd /srv/playdate && pnpm install --frozen-lockfile && \
   pnpm --filter @tama-breed-poc/tama-protocol build && \
-  RELAY_SECRET=$(grep ^SHARED_SECRET= relay-server/.env | cut -d= -f2-) \
-  VITE_RELAY_URL=https://playdate.bbamorachi.us VITE_RELAY_SECRET=$RELAY_SECRET \
+  VITE_RELAY_URL=https://playdate.bbamorachi.us \
   pnpm --filter @tama-breed-poc/web-client build && \
   sudo systemctl restart playdate-relay'
 ```

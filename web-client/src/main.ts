@@ -7,7 +7,7 @@ import { SerialBridge } from "./serial-bridge";
 import { Drawer } from "./ui/drawer";
 import { ExchangeScreen } from "./ui/screen-exchange";
 import { Scene } from "./ui/scene";
-import { connectDongle, hasWebSerial } from "./utils/webserial";
+import { connectDongle, hasParadiseSerial } from "./utils/webserial";
 import {
   decodePlayData,
   GHOST_HEADER_USED_LENGTH,
@@ -21,7 +21,8 @@ import {
   predictPlayType,
   projectFriendship,
   TcpObserver,
-  WebSerialTransport
+  WebSerialTransport,
+  WebUsbSerialPort
 } from "@tama-breed-poc/tama-protocol";
 
 // Simple lifecycle: attach the bridge the moment both a dongle and a socket
@@ -291,13 +292,18 @@ navigator.serial?.addEventListener("disconnect", (event) => {
     void releaseSerial();
   }
 });
+navigator.usb?.addEventListener("disconnect", (event) => {
+  if (serial?.port instanceof WebUsbSerialPort && event.device === serial.port.usbDevice) {
+    void releaseSerial();
+  }
+});
 
 must<HTMLButtonElement>("connect-serial").addEventListener("click", async () => {
   if (serialOpenPending) return;
   if (serial) await releaseSerial();
 
   try {
-    if (!hasWebSerial()) throw new Error("WebSerial unavailable");
+    if (!hasParadiseSerial()) throw new Error("WebSerial and WebUSB unavailable");
     serialOpenPending = true;
     showAppMessage("Choose your Paradise dongle.");
     serial = await connectDongle();
@@ -498,7 +504,7 @@ function friendlyError(error: unknown): string {
   if (/no port selected/i.test(message)) return "No dongle selected.";
   if (/port is already open/i.test(message)) return "That dongle is already open in this tab.";
   if (/failed to open serial port/i.test(message)) return "Could not open the dongle. Close other tabs/apps using it, then try again.";
-  if (/WebSerial unavailable/i.test(message)) return "Use Chrome or Edge on localhost to connect the dongle.";
+  if (/WebSerial and WebUSB unavailable/i.test(message)) return "Use a browser with WebSerial or WebUSB over HTTPS to connect the dongle.";
   if (/create room failed/i.test(message)) return "Could not create a room. Check that the relay server is running.";
   return message;
 }
