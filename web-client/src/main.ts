@@ -41,6 +41,12 @@ let currentRoom: string | undefined;
 let lastRoom: string | undefined;
 let role: "host" | "guest" | undefined;
 let serialOpenPending = false;
+const savedRoom = sessionStorage.getItem("playdate-room");
+const savedRole = sessionStorage.getItem("playdate-role");
+if (savedRoom && (savedRole === "host" || savedRole === "guest")) {
+  lastRoom = savedRoom;
+  role = savedRole;
+}
 
 const canvas = must<HTMLCanvasElement>("link-canvas");
 const scene = new Scene(new Drawer(canvas));
@@ -284,6 +290,7 @@ const bytesOutEl = must("bytes-out");
 let lastByteAt = 0;
 const ACTIVITY_LIVE_MS = 2000;
 const codeInput = must<HTMLInputElement>("room-code");
+if (lastRoom) codeInput.value = lastRoom;
 const relay = new RelayClient({ baseUrl: config.relayUrl, appName: "playdate-web" });
 
 // USB unplug funnels into the same recovery path as a manual click.
@@ -331,6 +338,7 @@ must<HTMLButtonElement>("create-room").addEventListener("click", async () => {
     currentRoom = code;
     lastRoom = code;
     role = "host";
+    rememberRoom(code);
     await connectWs(code, "a", token);
   } catch (error) {
     showAppError(error);
@@ -356,6 +364,7 @@ must<HTMLButtonElement>("join-room").addEventListener("click", async () => {
     currentRoom = code;
     lastRoom = code;
     const wsRole = role === "host" ? "a" : "b";
+    rememberRoom(code);
     // Knowing the 6-char code is the gate to fetch the token. Server
     // returns the same token across repeated calls (idempotent), so a
     // sticky-rejoin after a peer-refresh kick re-auths cleanly without
@@ -379,6 +388,16 @@ async function dropExistingSocket(): Promise<void> {
 async function connectWs(code: string, wsRole: "a" | "b", token: string): Promise<void> {
   const ws = relay.connect(code, wsRole, token);
   socket = ws;
+  ws.addEventListener("message", (event) => {
+    if (socket !== ws || typeof event.data !== "string") return;
+    if (event.data === "peer disconnected") {
+      beginSession();
+      showAppMessage("Peer disconnected");
+    } else if (event.data === "peer connected") {
+      beginSession();
+      showAppMessage("Peer connected");
+    }
+  });
   // Capture the socket reference so a stale close event from a previously
   // dropped socket can't clobber a freshly assigned one (Bug 3a).
   ws.addEventListener("open", () => {
@@ -401,6 +420,11 @@ async function connectWs(code: string, wsRole: "a" | "b", token: string): Promis
     beginSession();
     renderHud();
   });
+}
+
+function rememberRoom(code: string): void {
+  sessionStorage.setItem("playdate-room", code);
+  if (role) sessionStorage.setItem("playdate-role", role);
 }
 
 async function attachBridge(): Promise<void> {

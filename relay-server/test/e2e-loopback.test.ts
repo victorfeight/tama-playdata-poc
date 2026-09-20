@@ -49,13 +49,35 @@ describe("relay server", () => {
     expect([...new Uint8Array(await gotAtA)]).toEqual([4, 5, 6]);
 
     const aClosed = closed(a);
+    const peerLeft = onceTextMessage(b);
     a.close();
     await aClosed;
+    expect(await peerLeft).toBe("peer disconnected");
+    expect(b.readyState).toBe(WebSocket.OPEN);
+    const rejoined = onceTextMessage(b);
+    const a2 = connect(port, code, "a", token);
+    await opened(a2);
+    expect(await rejoined).toBe("peer connected");
+    const gotAtRejoinedA = onceBinaryMessage(a2);
+    b.send(Buffer.from([7]));
+    expect([...new Uint8Array(await gotAtRejoinedA)]).toEqual([7]);
+    const a2Replaced = closed(a2);
+    const a3 = connect(port, code, "a", token);
+    await opened(a3);
+    await a2Replaced;
+    expect(b.readyState).toBe(WebSocket.OPEN);
+    const gotAtReplacement = onceBinaryMessage(a3);
+    b.send(Buffer.from([8]));
+    expect([...new Uint8Array(await gotAtReplacement)]).toEqual([8]);
+    const a3Closed = closed(a3);
+    const bClosed = closed(b);
+    a3.close();
+    b.close();
+    await Promise.all([a3Closed, bClosed]);
     const db = openDb(path.join(dir, "sessions.db"));
     const counts = db.prepare("SELECT bytes_ab, bytes_ba FROM sessions WHERE code = ?").get(code) as { bytes_ab: number; bytes_ba: number };
-    expect(counts).toEqual({ bytes_ab: 3, bytes_ba: 3 });
+    expect(counts).toEqual({ bytes_ab: 3, bytes_ba: 5 });
     db.close();
-    b.close();
   });
 });
 
@@ -83,6 +105,19 @@ function onceBinaryMessage(ws: WebSocket): Promise<ArrayBuffer> {
         return;
       }
       resolve(Buffer.isBuffer(data) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : data as ArrayBuffer);
+    };
+    ws.once("message", onMessage);
+  });
+}
+
+function onceTextMessage(ws: WebSocket): Promise<string> {
+  return new Promise((resolve) => {
+    const onMessage = (data: WebSocket.RawData, isBinary: boolean) => {
+      if (isBinary) {
+        ws.once("message", onMessage);
+        return;
+      }
+      resolve(data.toString());
     };
     ws.once("message", onMessage);
   });

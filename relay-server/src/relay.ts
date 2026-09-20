@@ -45,6 +45,11 @@ export class RelayHub {
 
     pair[role] = { role, ws };
     this.pairs.set(code, pair);
+    const other = role === "a" ? pair.b : pair.a;
+    if (other?.ws.readyState === WebSocket.OPEN) {
+      other.ws.send("peer connected");
+      ws.send("peer connected");
+    }
 
     ws.binaryType = "arraybuffer";
     const heartbeat = setInterval(() => {
@@ -63,19 +68,17 @@ export class RelayHub {
 
     const onClose = () => {
       clearInterval(heartbeat);
-      // If this ws was already evicted by a reconnecting peer, the slot now
-      // holds a different ws — leave it alone. Only the live occupant tears
-      // down the pair and notifies the other side.
+      // A replaced socket cannot remove its replacement.
       const current = this.pairs.get(code);
       if (!current || current[role]?.ws !== ws) return;
-      clearInterval(current.flushTimer);
-      this.flushCounters(code, current);
+      current[role] = undefined;
       const other = role === "a" ? current.b : current.a;
-      if (other?.ws.readyState === WebSocket.OPEN) other.ws.close(4000, "peer closed");
-      // Tear down the in-memory pair so a fresh rejoin gets a clean slot,
-      // but DO NOT mark the session ended — it stays rejoin-eligible until
-      // SessionStore.expire() retires it on TTL.
-      this.pairs.delete(code);
+      if (other?.ws.readyState === WebSocket.OPEN) other.ws.send("peer disconnected");
+      if (!current.a && !current.b) {
+        clearInterval(current.flushTimer);
+        this.flushCounters(code, current);
+        this.pairs.delete(code);
+      }
     };
     ws.on("close", onClose);
     ws.on("error", onClose);
@@ -84,6 +87,10 @@ export class RelayHub {
   activeCount(code: string): number {
     const pair = this.pairs.get(code);
     return Number(Boolean(pair?.a)) + Number(Boolean(pair?.b));
+  }
+
+  hasRole(code: string, role: Role): boolean {
+    return Boolean(this.pairs.get(code)?.[role]);
   }
 
   private flushCounters(code: string, pair: Pair): void {

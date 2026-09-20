@@ -96,7 +96,7 @@ export async function buildServer(config: Config) {
       ws.close(4401, "unauthorized");
       return;
     }
-    if (relay.activeCount(code) >= 2) {
+    if (relay.activeCount(code) >= 2 && !relay.hasRole(code, role)) {
       ws.close(4409, "session full");
       return;
     }
