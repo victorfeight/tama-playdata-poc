@@ -85,6 +85,7 @@ class FakeUsbDevice implements UsbDeviceLike {
   }> = [];
   readonly controlReads: UsbControlTransferParameters[] = [];
   readonly bulkWrites: Uint8Array[] = [];
+  readonly bulkReadLengths: number[] = [];
   readonly calls: string[] = [];
   nextRead = Uint8Array.from([0x50, 0x4b, 0x54, 0x0d, 0x0a]);
 
@@ -137,8 +138,9 @@ class FakeUsbDevice implements UsbDeviceLike {
     this.controlWrites.push({ setup, data: bytes });
     return { status: "ok", bytesWritten: data ? bytes.length : undefined };
   }
-  async transferIn(endpointNumber: number): Promise<{ status: string; data: DataView }> {
+  async transferIn(endpointNumber: number, length: number): Promise<{ status: string; data: DataView }> {
     assert(endpointNumber > 0, "input endpoint must be resolved");
+    this.bulkReadLengths.push(length);
     const bytes = this.nextRead;
     this.nextRead = new Uint8Array();
     return { status: "ok", data: dataView(bytes) };
@@ -152,6 +154,18 @@ class FakeUsbDevice implements UsbDeviceLike {
     const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength).slice();
     this.bulkWrites.push(bytes);
     return { status: "ok", bytesWritten: bytes.length };
+  }
+}
+
+class QueuedReadDevice extends FakeUsbDevice {
+  readonly reads: Array<(bytes: number[]) => void> = [];
+
+  override transferIn(endpointNumber: number, length: number): Promise<{ status: string; data: DataView }> {
+    assert(endpointNumber > 0, "input endpoint must be resolved");
+    this.bulkReadLengths.push(length);
+    return new Promise((resolve) => {
+      this.reads.push((bytes) => resolve({ status: "ok", data: dataView(bytes) }));
+    });
   }
 }
 
@@ -196,6 +210,7 @@ async function testCh34x(): Promise<void> {
   const device = new FakeUsbDevice(0x1a86, 0x7523, BULK_CONFIGURATION);
   const port = new WebUsbSerialPort(device, ch34xDriver);
   await port.open(OPEN_OPTIONS);
+  equal(device.bulkReadLengths.length, 32, "CH340 queued read count");
   assert(hasControlWrite(device, 0x9a, 0x1312, 0xf383), "CH34x baud setup");
   assert(hasControlWrite(device, 0xa4, 0xff9f), "CH34x DTR/RTS setup");
   await exerciseStreams(port, device);
@@ -205,6 +220,7 @@ async function testCp210x(): Promise<void> {
   const device = new FakeUsbDevice(0x10c4, 0xea60, BULK_CONFIGURATION);
   const port = new WebUsbSerialPort(device, cp210xDriver);
   await port.open(OPEN_OPTIONS);
+  equal(device.bulkReadLengths.length, 32, "CP210x queued read count");
   assert(hasControlWrite(device, 0x00, 1), "CP210x UART enable");
   assert(hasControlWrite(device, 0x07, 0x0101), "CP210x DTR setup");
   assert(hasControlWrite(device, 0x07, 0x0202), "CP210x RTS setup");
@@ -212,6 +228,24 @@ async function testCp210x(): Promise<void> {
   equal(baud?.data.join(","), "0,8,7,0", "CP210x 460800 payload");
   await exerciseStreams(port, device);
   assert(hasControlWrite(device, 0x00, 0), "CP210x UART disable");
+}
+
+async function testQueuedReads(): Promise<void> {
+  const device = new QueuedReadDevice(0x1a86, 0x7523, BULK_CONFIGURATION);
+  const port = new WebUsbSerialPort(device, ch34xDriver);
+  await port.open(OPEN_OPTIONS);
+  equal(device.reads.length, 32, "reads should be queued before the first frame");
+  assert(port.readable, "readable stream should exist");
+  const reader = port.readable.getReader();
+  const first = reader.read();
+  device.reads[1]?.([2]);
+  device.reads[0]?.([1]);
+  equal((await first).value?.[0], 1, "queued reads retain submission order");
+  equal(device.reads.length, 33, "completed read should be replaced immediately");
+  equal((await reader.read()).value?.[0], 2, "second queued read");
+  await reader.cancel();
+  reader.releaseLock();
+  await port.close();
 }
 
 async function testFtdi(): Promise<void> {
@@ -301,6 +335,7 @@ function testRegistry(): void {
 test("WebUSB adapter drivers and registry", async () => {
   await testCh34x();
   await testCp210x();
+  await testQueuedReads();
   await testFtdi();
   await testCdcAcm();
   await testProlific();

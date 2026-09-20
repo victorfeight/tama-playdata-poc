@@ -11,6 +11,7 @@ import {
 export interface WebUsbSerialDriver {
   readonly name: string;
   readonly filters: readonly UsbDeviceFilterLike[];
+  readonly readQueueDepth?: number;
   supports(device: UsbDeviceLike): boolean;
   layout(configuration: UsbConfigurationLike): UsbPortLayout;
   initialize(context: WebUsbDriverContext, options: BrowserSerialOpenOptions): Promise<void>;

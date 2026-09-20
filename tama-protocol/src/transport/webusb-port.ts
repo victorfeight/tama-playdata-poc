@@ -85,23 +85,37 @@ export class WebUsbSerialPort implements BrowserSerialPort {
     if (!context) throw new Error("USB serial driver was not initialized");
     const { input, output } = context.layout;
     const inputPacketSize = Math.max(1, input.packetSize);
+    const readQueueDepth = this.driver.readQueueDepth ?? 4;
+    type ReadResult =
+      | { result: Awaited<ReturnType<UsbDeviceLike["transferIn"]>>; error?: never }
+      | { error: unknown; result?: never };
+    const pendingReads: Promise<ReadResult>[] = [];
+    const queueRead = () => {
+      pendingReads.push(this.device.transferIn(input.endpointNumber, inputPacketSize)
+        .then((result) => ({ result }), (error) => ({ error })));
+    };
 
     this.readable = new ReadableStream<Uint8Array>(
       {
+        start: () => {
+          for (let i = 0; i < readQueueDepth; i++) queueRead();
+        },
         pull: async (controller) => {
           if (this.closing) {
             controller.close();
             return;
           }
           try {
-            const result = await this.device.transferIn(
-              input.endpointNumber,
-              inputPacketSize,
-            );
+            const next = pendingReads.shift();
+            if (!next) throw new Error("USB read queue is empty");
+            const outcome = await next;
             if (this.closing) {
               controller.close();
               return;
             }
+            if ("error" in outcome) throw outcome.error;
+            queueRead();
+            const result = outcome.result;
             if (result.status !== "ok") {
               throw new Error(`USB serial bulk read failed (${result.status})`);
             }

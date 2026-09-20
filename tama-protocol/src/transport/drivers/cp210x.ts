@@ -12,6 +12,7 @@ function uint32Le(value: number): Uint8Array {
 
 export const cp210xDriver: WebUsbSerialDriver = {
   name: "CP210x",
+  readQueueDepth: 32,
   filters: [...PRODUCT_IDS].map((productId) => ({ vendorId: VENDOR_ID, productId })),
   supports: (device) =>
     device.vendorId === VENDOR_ID && PRODUCT_IDS.has(device.productId),

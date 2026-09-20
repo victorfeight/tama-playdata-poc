@@ -33,6 +33,7 @@ export function calculateCh34xBaudRegisters(baudRate: number): BaudRegisters {
 
 export const ch34xDriver: WebUsbSerialDriver = {
   name: "CH340/CH341",
+  readQueueDepth: 32,
   filters: [
     { vendorId: VENDOR_ID, productId: 0x7523 },
     { vendorId: VENDOR_ID, productId: 0x5523 },
