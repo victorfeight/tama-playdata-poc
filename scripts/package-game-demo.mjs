@@ -10,6 +10,9 @@ if (!output) throw new Error("Usage: node scripts/package-game-demo.mjs /new/sta
 const destination = path.resolve(output), dist = path.join(root, "web-client/dist");
 const html = await readFile(path.join(dist, "games/index.html"), "utf8");
 if (!html.includes("/assets/")) throw new Error("Build the production web entry first");
+// Resolve provenance before creating output so a Git failure leaves no partial package.
+const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+const dirty = Boolean(execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).trim());
 await mkdir(destination); // Exclusive destination: do not overwrite another release.
 for (const name of ["games", "assets"]) await cp(path.join(dist, name), path.join(destination, name), { recursive: true });
 const files = {};
@@ -21,7 +24,5 @@ async function scan(dir) {
   }
 }
 await scan("games"); await scan("assets");
-const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
-const dirty = Boolean(execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).trim());
 await writeFile(path.join(destination, "manifest.json"), JSON.stringify({ sourceCommit, dirty, files }, null, 2) + "\n");
 console.log(`Staged ${Object.keys(files).length} files at ${destination}; source ${sourceCommit}${dirty ? " (uncommitted changes)" : ""}. Not deployed.`);
