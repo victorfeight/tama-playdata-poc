@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>TamaHome · Game room</title></head>
+<body>
+  <main>
+    <header><a class="brand" href="/">bbamorachi</a><span class="badge">Game room · preview</span></header>
+    <section class="intro"><div class="blocks" aria-hidden="true"><i></i><i></i><i></i><i></i></div><h1>A little friendly competition.</h1><p>Bring your Paradise. Share a room. Play together.</p></section>
+    <section class="card">
+      <div class="row"><h2>Your connection</h2><span id="device-state" class="pill">Not connected</span></div>
+      <p>Send the multiplayer Tetris demo with TamaHome first. Disconnect there, then leave the game on its main menu.</p>
+      <button id="connect">Connect Paradise</button>
+    </section>
+    <section class="card">
+      <h2>Meet a friend</h2>
+      <div class="room-actions"><button id="create" disabled>Create room</button><span>or</span><label>Room code<input id="code" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="ABC123"></label><button id="join" disabled>Join</button></div>
+      <div id="room" hidden><div class="row"><span>Your room</span><strong id="room-code"></strong><button id="copy">Copy code</button></div><button id="leave" class="secondary">Leave room</button></div>
+      <p id="status" role="status" aria-live="polite">Connect your Paradise to get started.</p>
+      <p id="play-instructions" hidden>On both toys, choose <strong>LOCAL 1VS1</strong> now. If you already entered it, press <strong>A to retry</strong> on both toys.</p>
+    </section>
+    <section class="card scoreboard"><div><span>Round</span><strong id="round">—</strong></div><div><span>Match</span><strong id="match">Waiting</strong></div></section>
+    <details><summary>Connection details</summary><p id="traffic">No game packets yet.</p><pre id="log"></pre></details>
+    <footer>Preview for the multiplayer demo. Keep this page open while you play.</footer>
+  </main>
+  <script type="module" src="/src/games/main.ts"></script>
+</body></html>

@@ -6,7 +6,7 @@ import { parseGhost } from "../src/ghost";
 import { ObservedPacket, TcpObserver } from "../src/tcp-observer";
 import { tcpCrypt } from "../src/tcp-crypto";
 
-const FIXTURE = fileURLToPath(new URL("./fixtures/ghost_kuchipatchi.bin", import.meta.url));
+const FIXTURE = process.env.TAMA_GHOST_FIXTURE ?? fileURLToPath(new URL("./fixtures/ghost_kuchipatchi.bin", import.meta.url));
 const SESSION_ID = 0x11223344;
 const MSG_TYPE = 1;
 const textEncoder = new TextEncoder();

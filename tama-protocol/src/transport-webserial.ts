@@ -65,7 +65,7 @@ export class WebSerialTransport implements Transport {
   async read(timeoutMs?: number): Promise<Uint8Array> {
     if (!this.reader) throw new Error("serial reader is not open");
     const result = await withTimeout(this.reader.read(), timeoutMs);
-    if (result.done) return new Uint8Array();
+    if (result.done) throw new Error("Serial connection closed.");
     return result.value;
   }
 

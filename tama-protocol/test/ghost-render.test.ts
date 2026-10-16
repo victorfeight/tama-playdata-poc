@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderGhost } from "../src/ghost-render";
 
-const FIXTURE = fileURLToPath(new URL("./fixtures/ghost_kuchipatchi.bin", import.meta.url));
+const FIXTURE = process.env.TAMA_GHOST_FIXTURE ?? fileURLToPath(new URL("./fixtures/ghost_kuchipatchi.bin", import.meta.url));
 
 describe("renderGhost(kuchipatchi)", () => {
   const ghost = new Uint8Array(readFileSync(FIXTURE));

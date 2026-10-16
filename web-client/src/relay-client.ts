@@ -3,6 +3,8 @@ export interface RelayClientOptions {
   /** Tenant tag the server records on the session row for log/metrics
    *  partitioning ("playdate-web", "tamahome-desktop", etc.). */
   appName: string;
+  /** Optional UI guard for dedicated protocols; existing callers stay permissive. */
+  expectedApp?: string;
 }
 
 export interface RoomCreated {
@@ -33,7 +35,10 @@ export class RelayClient {
       headers: { "x-app-name": this.options.appName }
     });
     if (!response.ok) throw new Error(`join room failed: ${response.status}`);
-    const data = (await response.json()) as { token: string };
+    const data = (await response.json()) as { token: string; app?: string };
+    if (this.options.expectedApp && data.app !== this.options.expectedApp) {
+      throw new Error("This room belongs to another activity. Ask your friend for a game room code.");
+    }
     return data.token;
   }
 
