@@ -31,10 +31,10 @@ def ack():
  raise TimeoutError('No ACK')
 try:
  for line in (ROOT/'research/pearly-gates/evidence/glacier-download-navigation.jsonl').read_text().splitlines():
-  cmd,*args=json.loads(line)['command']
-  if cmd=='step':m.advance(float(args[0]))
-  elif cmd=='press':press(args[0],float(args[1]) if len(args)>1 else 200,400)
-  elif cmd=='rotate':m.rotate(int(args[0]))
+  cmd,*values=json.loads(line)['command']
+  if cmd=='step':m.advance(float(values[0]))
+  elif cmd=='press':press(values[0],float(values[1]) if len(values)>1 else 200,400)
+  elif cmd=='rotate':m.rotate(int(values[0]))
  press('b',200,400);m.advance(300);drain()
  raw=args.payload.read_bytes()
  send(b'PKT '+str(len(raw)).encode()+b'\r\n');ack();wire=encode_type3_wire_for_test(raw);pos=0

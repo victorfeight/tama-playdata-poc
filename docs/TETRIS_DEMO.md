@@ -1,5 +1,9 @@
 # Multiplayer game demo and integration plan
 
+Historical captured-binary checkpoint. For the current rebuilt payload,
+instructions, packaging and site architecture use
+[SOURCE_BLOCKS_PREVIEW.md](SOURCE_BLOCKS_PREVIEW.md).
+
 2026-10-16. Based on current `victorfeight/tama-playdata-poc` upstream
 `a2cee3923f51670abaf53df4741d073dd468ffb2`. This branch is a bounded transport/UI
 prototype. It is **not** the finished source reconstruction of multiplayer Tetris.

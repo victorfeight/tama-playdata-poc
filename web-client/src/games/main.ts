@@ -8,7 +8,7 @@ const element = <T extends HTMLElement>(id: string) => document.getElementById(i
 const connect = element<HTMLButtonElement>("connect"), create = element<HTMLButtonElement>("create");
 const join = element<HTMLButtonElement>("join"), code = element<HTMLInputElement>("code");
 const relay = new RelayClient({ baseUrl: import.meta.env.VITE_RELAY_URL ?? location.origin,
-  appName: "tamahome-game-demo", expectedApp: "tamahome-game-demo" });
+  appName: "tamahome-blocks-v1", expectedApp: "tamahome-blocks-v1" });
 const observers = { in: new Tet3Observer(), out: new Tet3Observer() };
 let serial: WebSerialTransport | undefined, socket: WebSocket | undefined, bridge: SerialBridge | undefined;
 let busy = false, generation = 0;
@@ -74,10 +74,12 @@ async function enter(role: "a" | "b") {
   if (role === "b" && !/^[A-Z0-9]{6}$/.test(input)) { status("Enter your friend’s six-character room code."); return; }
   const room = role === "a" ? await relay.createRoom() : { code: input, token: await relay.fetchToken(input) };
   const current = ++generation, ws = relay.connect(room.code, role, room.token); socket = ws;
+  let peerPresent = false;
   // Listen before OPEN so neither the first peer notification nor a close is lost.
   ws.addEventListener("message", event => {
     if (generation !== current || typeof event.data !== "string") return;
     if (event.data === "peer connected") {
+      peerPresent = true;
       status("Your friend is here. Start the game on both toys."); element("play-instructions").hidden = false;
     } else if (event.data === "peer disconnected") {
       // End this session; do not feed a replacement peer an old game's bytes.
@@ -93,7 +95,7 @@ async function enter(role: "a" | "b") {
   });
   if (generation !== current || !serial) return;
   element("room").hidden = false; element("room-code").textContent = room.code;
-  status("Room ready. Waiting for your friend. Keep the game on its main menu.");
+  status(peerPresent ? "Your friend is here. Start Versus on both toys." : "Room ready. Waiting for your friend. Keep the game on its main menu.");
   bridge = new SerialBridge(serial, ws, {
     bytes(direction, bytes, counts) {
       if (generation !== current) return;
@@ -116,3 +118,15 @@ element("copy").addEventListener("click", () => {
 });
 window.addEventListener("pagehide", () => { bridge?.stop(); socket?.close(); void serial?.close(); });
 controls();
+// Optional staging manifest: the package builder verifies the source receipt
+// before including a payload. Missing manifest simply leaves manual send intact.
+void fetch("./payload.json").then(async response => {
+  if (!response.ok) return;
+  const data: unknown = await response.json();
+  if (!data || typeof data !== "object" || !("file" in data) || !("sha256" in data)) return;
+  const { file, sha256 } = data;
+  if (typeof file !== "string" || !/^blocks\.[a-f0-9]{12}\.pdlo\.bin$/.test(file) ||
+      typeof sha256 !== "string" || !/^[a-f0-9]{64}$/.test(sha256)) return;
+  const link = element<HTMLAnchorElement>("payload-link");
+  link.href = `./${file}`; link.title = `SHA-256: ${sha256}`; element("download").hidden = false;
+}).catch(() => { /* The preview can also use a manually supplied payload. */ });

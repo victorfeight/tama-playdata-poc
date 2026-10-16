@@ -2,6 +2,10 @@
 
 Standalone proof-of-concept for relaying Tamagotchi Paradise playdate and breeding bytes between two browsers over WebSocket, with each browser connected to a USB serial dongle through WebSerial.
 
+The separate game-room preview is documented in
+[Source Blocks preview](docs/SOURCE_BLOCKS_PREVIEW.md), including the SDK source,
+tests, verified payload packaging and proposed gateway/server placement.
+
 This project intentionally does not modify `TAMA_NEW`, `unexists-nextjs-frontend`, `strapi-backend-unexists`, `security-audit`, or `bbamorachi_site-main`.
 
 ## What Is Here
