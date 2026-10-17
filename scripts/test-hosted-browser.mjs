@@ -25,6 +25,11 @@ function command(line) {
     })); return result;
   });
 }
+async function waitStates(predicate) {
+  const deadline = performance.now() + 5000;
+  while (!states.every(predicate) && performance.now() < deadline) await new Promise(r => setTimeout(r, 25));
+  assert(states.every(predicate), JSON.stringify(states));
+}
 try {
   await command(`I 2 ${now()} ${mode === "direct" ? 1 : 0}`);
   for (let index = 0; index < 2; index++) {
@@ -111,15 +116,13 @@ try {
   }
   for (let round = 1; round <= 2; round++) {
     await host.waitForFunction(r => document.querySelector('#group-instruction').textContent.startsWith(`Round ${r} ·`), round, { timeout: 20000 });
-    const deadline = performance.now() + 5000;
-    while (!states.every(s => s.state === 4 && s.round === round) && performance.now() < deadline) await new Promise(r => setTimeout(r, 25));
-    assert(states.every(s => s.state === 4 && s.round === round), JSON.stringify(states));
+    await waitStates(s => s.state === 4 && s.round === round);
     await command('O 0');
   }
   if (mode === 'hosted') {
   await host.waitForFunction(() => document.querySelector('#group-action').textContent === 'Open next match', null, { timeout: 20000 });
   assert((await host.locator('#group-instruction').textContent()).includes('Willow wins the match'));
-  assert(states.every(s => s.state === 7 && s.winner === 1 && s.wins === 8), JSON.stringify(states));
+  await waitStates(s => s.state === 7 && s.winner === 1 && s.wins === 8);
   checks.push('START/seed READY/countdown/GO, real source TOP_OUT, two rounds, packed wins and final match result through live service');
   await guest.screenshot({ path: `${output}/results-mobile.png`, fullPage: true });
   await host.locator('#group-action').click();
@@ -132,7 +135,8 @@ try {
   } else {
     await host.waitForFunction(() => document.querySelector('#match').textContent.endsWith('Finished'));
     assert((await host.locator('#match').textContent()).includes('Willow 2'));
-    assert(states.every(s => s.state === 7 && s.winner === 1 && s.wins === 8), JSON.stringify(states));
+    // The first browser can observe RESULT before the peer consumes it.
+    await waitStates(s => s.state === 7 && s.winner === 1 && s.wins === 8);
     checks.push('Direct native pair completed two rounds with personalized score; no browser readiness or host start required');
   }
   await guest.locator('#group-leave').click(); await guest.locator('#group-entry:not([hidden])').waitFor();
@@ -146,7 +150,7 @@ try {
     await guest.locator('#group-current:not([hidden])').waitFor();
     await host.locator('#group-action').click();
     await host.waitForFunction(() => document.querySelector('#group-instruction').textContent.startsWith('Round 1 ·'), null, { timeout: 20000 });
-    assert(states.every(s => s.state === 4 && s.round === 1), JSON.stringify(states));
+    await waitStates(s => s.state === 4 && s.round === 1);
     await guest.evaluate(() => window.unplugToy());
     await guest.waitForFunction(() => document.querySelector('#device-state').textContent === 'Not connected');
     await host.waitForFunction(() => document.querySelector('#group-instruction').textContent.includes('friend disconnected'));

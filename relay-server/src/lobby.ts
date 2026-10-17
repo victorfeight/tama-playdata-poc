@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { WebSocket, type RawData } from "ws";
-import { PlaydateOutcomeObserver } from "@tama-breed-poc/tama-protocol";
+import { PlaydateOutcomeObserver, normalizeNickname, nicknameProblem } from "@tama-breed-poc/tama-protocol";
 import type { LobbyEntry, LobbyListing, LobbyMember, LobbySnapshot, PlaydateOutcome } from "@tama-breed-poc/tama-protocol";
 
 interface Member extends LobbyMember {
@@ -279,7 +279,7 @@ export class LobbyHub {
 }
 
 export function cleanNickname(value: string): string {
-  const name = value.replace(/[\p{Cc}\p{Cf}]/gu, "").trim();
-  if (!name || [...name].length > 20) throw new LobbyError(400, "Choose a nickname of 1–20 characters.");
+  const name = normalizeNickname(value), problem = nicknameProblem(name);
+  if (problem) throw new LobbyError(400, problem);
   return name;
 }

@@ -1,5 +1,6 @@
 import type { LobbyEntry, LobbyListing, LobbySnapshot } from "@tama-breed-poc/tama-protocol";
 import { LobbyClient } from "../lobby-client";
+import { bindNickname, readNickname } from "./nickname";
 
 interface Hooks {
   socket(socket: WebSocket | undefined): void;
@@ -31,7 +32,7 @@ export class PlaydateLobby {
     } catch { /* A blocked or old storage entry does not prevent joining. */ }
     const invite = new URLSearchParams(location.search).get("room");
     if (invite && /^[A-Z0-9]{6}$/i.test(invite)) this.code.value = invite.toUpperCase();
-    this.nickname.addEventListener("input", () => this.nickname.setCustomValidity(""));
+    bindNickname(this.nickname);
     element("create-room").addEventListener("click", () => void this.run(async () => {
       this.entry = await client.create(this.name(), element<HTMLInputElement>("public-room").checked ? "public" : "private");
       await this.connect();
@@ -88,12 +89,7 @@ export class PlaydateLobby {
   }
 
   private name(): string {
-    const value = this.nickname.value.replace(/[\p{Cc}\p{Cf}]/gu, "").trim();
-    if (!value || [...value].length > 20) {
-      this.nickname.setCustomValidity("Choose a nickname of 1–20 characters.");
-      this.nickname.reportValidity(); this.nickname.focus();
-      throw new Error("Add your nickname to join a Playdate.");
-    }
+    const value = readNickname(this.nickname);
     try { localStorage.setItem("playdate-nickname", value); } catch { /* Optional convenience. */ }
     return value;
   }

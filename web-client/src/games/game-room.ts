@@ -2,6 +2,7 @@ import type { GameRoomEntry, GameRoomSnapshot, GameRoomListing, GameRoomMode, We
 import { SerialBridge } from "../serial-bridge";
 import { Tet3Observer } from "./tet3";
 import { games, gameId, modeAdvice } from "./catalog";
+import { bindNickname, readNickname } from "../ui/nickname";
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 interface Hooks { serial(): WebSerialTransport | undefined; game(): string; busy(): boolean; changed(): void; adapterLost(): void; }
 /** Shared room presentation. Hosted rounds belong to the server; direct rounds
@@ -23,6 +24,7 @@ export class GameRoom {
   private directResult = "Waiting";
   private selection = el<HTMLSelectElement>("match-kind");
   constructor(private readonly base: string, private readonly hooks: Hooks) {
+    bindNickname(el<HTMLInputElement>("group-nickname"));
     try { el<HTMLInputElement>("group-nickname").value = localStorage.getItem("game-nickname") ?? localStorage.getItem("playdate-nickname") ?? ""; } catch { /* Optional nickname persistence. */ }
     this.selection.addEventListener("change", () => { this.render(); hooks.changed(); if (!this.active) void this.refresh(); });
     el("group-create").addEventListener("click", () => void this.run(async () => {
@@ -97,8 +99,7 @@ export class GameRoom {
     const data = await response.json(); if (!response.ok) throw new Error(data.message ?? data.error ?? "Could not reach the room."); return data;
   }
   private nickname() {
-    const input = el<HTMLInputElement>("group-nickname"), name = input.value.replace(/[\p{Cc}\p{Cf}]/gu, "").trim();
-    if (!name || [...name].length > 20) { input.focus(); throw new Error("Choose a nickname of 1–20 characters."); }
+    const name = readNickname(el<HTMLInputElement>("group-nickname"));
     try { localStorage.setItem("game-nickname", name); } catch { /* Optional convenience. */ }
     return name;
   }
