@@ -24,3 +24,6 @@ export * from "./serial-reader";
 export * from "./uart-channel";
 export * from "./download-sender";
 export * from "./media-sender";
+export * from "./tet3-session";
+export * from "./hosted-match";
+export * from "./game-room";

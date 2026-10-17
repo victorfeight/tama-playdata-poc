@@ -2,8 +2,8 @@ import { encodeTet3, Tet3Observer, type Tet3Packet } from "./tet3";
 
 export type Tet3Message = Pick<Tet3Packet, "type" | "round" | "a" | "b" | "c">;
 
-/** DRAFT: not exported or used by either live activity page. Needs SDK C
- * differential qualification before the 2–16-player coordinator is connected.
+/** External-host endpoint, qualified against SDK C traces by
+ * scripts/test-hosted-native.ts. Not a physical-device qualification.
  * Host-side counterpart of SDK net/tet3_session.c. One endpoint per toy.
  * Stop-and-wait, bounded queue, ACK priority; no sockets or clocks owned here.
  */
@@ -35,7 +35,8 @@ export class Tet3Session {
   get pending(): number { return this.queue.length; }
 
   enqueue(type: number, round = 0, a = 0, b = 0, c = 0): boolean {
-    if (this.error || this.queue.length >= 8) return false;
+    if (this.error) return false;
+    if (this.queue.length >= 8) { this.stop("Toy send queue overflow"); return false; }
     this.queue.push({ type, round, a: a >>> 0, b: b >>> 0, c: c >>> 0 });
     return true;
   }

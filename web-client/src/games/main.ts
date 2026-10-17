@@ -1,4 +1,5 @@
 import "./style.css";
+import { HostedGameRoom } from "./hosted-room";
 import { requestParadiseSerialPort, UartConnectionError, type WebSerialTransport } from "@tama-breed-poc/tama-protocol";
 import { RelayClient } from "../relay-client";
 import { SerialBridge } from "../serial-bridge";
@@ -18,6 +19,7 @@ let relay = makeRelay();
 const observers = { in: new Tet3Observer(), out: new Tet3Observer() };
 let serial: WebSerialTransport | undefined, socket: WebSocket | undefined, bridge: SerialBridge | undefined;
 let busy = false, generation = 0;
+let hosted: HostedGameRoom | undefined;
 let gameAsset: InstallAsset | undefined, musicAssets: MusicAssets | undefined;
 let transferring = false;
 const installer = new GameInstallService(new URL("./", location.href));
@@ -26,14 +28,18 @@ let player: number | undefined, currentRound = 0;
 const lines: string[] = [];
 function status(text: string) { element("status").textContent = text; }
 function controls() {
-  gameSelect.disabled = Boolean(serial || socket || busy);
+  gameSelect.disabled = Boolean(serial || socket || busy || hosted?.active);
   connect.disabled = busy; connect.textContent = serial ? "Disconnect" : "Connect Paradise";
-  create.disabled = join.disabled = !serial || busy || Boolean(socket);
+  create.disabled = join.disabled = !serial || busy || Boolean(socket) || !!hosted?.active || !!hosted?.selected;
   code.disabled = busy || Boolean(socket);
   element<HTMLButtonElement>("leave").disabled = busy;
   element("device-state").textContent = serial ? "Connected" : "Not connected";
-  sendButton.disabled = !serial || busy || !!socket || !gameAsset;
-  musicButton.disabled = !serial || busy || !!socket || !musicAssets;
+  sendButton.disabled = !serial || busy || !!socket || !!hosted?.active || !gameAsset;
+  musicButton.disabled = !serial || busy || !!socket || !!hosted?.active || !musicAssets;
+  const inRoom = !!socket || !!hosted?.active;
+  for (const id of ["install-actions", "install-instruction", "game-download-status", "existing-game-hint"]) element(id).hidden = inRoom;
+  element("download").hidden = inRoom || !gameAsset;
+  hosted?.update();
 }
 function log(text: string) {
   lines.push(text); if (lines.length > 40) lines.shift(); element("log").textContent = lines.join("\n");
@@ -53,6 +59,7 @@ function observe(packet: Tet3Packet, direction: "in" | "out") {
   } else if (packet.type === 12 || packet.type === 15) element("match").textContent = "Disconnected";
 }
 async function disconnect(message: string) {
+  hosted?.releaseAdapter();
   ++generation;
   const oldBridge = bridge, oldSocket = socket, oldSerial = serial;
   bridge = undefined; socket = undefined; serial = undefined;
@@ -129,7 +136,7 @@ element("copy").addEventListener("click", () => {
   void navigator.clipboard.writeText(element("room-code").textContent ?? "").then(
     () => status("Room code copied."), () => status("Copy the six-character code shown above."));
 });
-window.addEventListener("pagehide", () => { bridge?.stop(); socket?.close(); void serial?.close(); });
+window.addEventListener("pagehide", () => { hosted?.close(); bridge?.stop(); socket?.close(); void serial?.close(); });
 function installProgress(value: InstallProgress) {
   element("install-progress").hidden = false;
   element("install-status").textContent = value.phase;
@@ -139,7 +146,7 @@ function installProgress(value: InstallProgress) {
   else { bar.max = value.total; bar.value = value.done ?? 0; }
 }
 async function install(kind: "music" | "game") {
-  if (!serial || socket) return;
+  if (!serial || socket || hosted?.active) return;
   transferring = true;
   try {
     if (kind === "music") {
@@ -200,14 +207,17 @@ async function selectGame() {
     element("music-setup").hidden = !musicAssets;
     element("game-download-status").textContent = "";
   } catch (error) {
-    if (chosen === selectedGame) element("game-download-status").textContent = error instanceof Error ? error.message : "Could not load game files.";
+    if (chosen === selectedGame) element("game-download-status").textContent = error instanceof SyntaxError ? "Game files could not be loaded. Refresh to try again." : error instanceof Error ? error.message : "Could not load game files.";
   } finally { controls(); }
 }
 gameSelect.addEventListener("change", () => {
-  if (serial || socket || busy) return;
+  if (serial || socket || busy || hosted?.active) return;
   const url = new URL(location.href); url.searchParams.set("game", gameId(gameSelect.value));
   history.replaceState(null, "", url); void selectGame();
 });
-controls(); void selectGame();
+hosted = new HostedGameRoom(import.meta.env.VITE_RELAY_URL ?? location.origin, {
+  serial: () => serial, game: () => gameSelect.value, busy: () => busy || !!socket, changed: controls
+});
+controls(); void selectGame(); void hosted.initialize();
 // Optional staging manifest: the package builder verifies the source receipt
 // before including a payload. Missing manifest simply leaves manual send intact.

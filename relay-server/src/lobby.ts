@@ -258,7 +258,7 @@ export class LobbyHub {
   }
 }
 
-function cleanNickname(value: string): string {
+export function cleanNickname(value: string): string {
   const name = value.replace(/[\p{Cc}\p{Cf}]/gu, "").trim();
   if (!name || [...name].length > 20) throw new LobbyError(400, "Choose a nickname of 1–20 characters.");
   return name;

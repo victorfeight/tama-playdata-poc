@@ -8,6 +8,7 @@ import { openDb } from "./db";
 import { RelayHub } from "./relay";
 import { Role, SessionStore } from "./sessions";
 import { LobbyHub } from "./lobby";
+import { registerGameRooms } from "./game-room-routes";
 
 export async function buildServer(config: Config) {
   // Walk X-Forwarded-For only through explicitly trusted proxies. Without this,
@@ -48,6 +49,7 @@ export async function buildServer(config: Config) {
   });
 
   app.get("/health", async () => ({ ok: true }));
+  if (config.hostedGames) registerGameRooms(app);
 
   // Separate membership credentials per seat. Existing desktop/code-only
   // endpoints below retain their original contract.

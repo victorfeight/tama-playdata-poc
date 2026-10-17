@@ -83,8 +83,8 @@ Local browser/native music-install qualification is recorded in
 `BROWSER_UART_QUALIFICATION.md`. Both lobby and installer were published at `4c98c65`.
 Server Node 20 staging passes the full browser flow and the existing game
 transport probe; see `releases/2026-10-17-lobby-uart.md`. Physical two-player/WAN
-testing remains open. The 2–16-player host
-endpoint is a non-exported draft; neither page silently enables that mode.
+testing remains open. At that release the 2–16-player host endpoint was a
+non-exported draft; neither page silently enabled that mode.
 
 The compatibility run exposed legacy reconnects sharing the ten-request default
 limit with creation. Joining and WebSocket reconnects now use the existing lobby
@@ -102,3 +102,51 @@ The subsequent switchable starter/ready flow and diagnostic logs are live at
 `23b0b2d`; all eight public browser check groups pass with simulated UART. See [the flow and incident record](PLAYDATE_START_FLOW.md).
 The successful retry after dongle reconnect does not establish a role restriction
 or fix the unresolved adapter/device recovery issue.
+
+## Local hosted implementation, 2026-10-17
+
+The endpoint is now exported and the existing service has opt-in
+`HOSTED_GAMES=1` routes `/game-rooms` and `/game-ws/:code`. Public production is
+unchanged. `hosted-match.ts` owns pure round/target/result policy;
+`game-rooms.ts` owns credentials and connection lifetimes;
+`games/hosted-room.ts` reuses `SerialBridge` and the separate Games page.
+No changes to stock Playdate UART forwarding are required.
+
+Both Blocks Online (mode 4) and the new Pocket Puzzle Online (`0x50500202`) use
+the host. Direct two-player modes remain separate. The new Puzzle BIN is required;
+the current live BIN does not have Online. Attack routing, tie settlement and
+forfeit rules are ours; the original private site's policies remain unknown.
+
+Implemented: private/public rooms, 2–16 distinct seat credentials, owner start,
+toy/browser readiness, exact seed barrier, countdown, one-recipient attacks,
+alive masks, first-to-two results, bounded slow-peer handling, and explicit
+fresh-session rematch. Leaving keeps the adapter connected. Mid-match joining
+and board resumption are deliberately unavailable. A reproduced heartbeat/start
+race is fixed: queued lobby/heartbeat ACKs do not revoke readiness; the round's
+preparation barrier drains them in order.
+
+Qualification: 49 relay tests; 1,094 SDK C/TypeScript endpoint comparisons;
+14 compiled-client scenarios across 2/3/8/16 players including latency/loss,
+ties and disconnects. Two-browser checks exercise actual HTTP/WS with simulated
+WebSerial and compiled C clients. The SDK's native Pocket Puzzle probe also
+passes actual firmware UART play with installed music and a direct-mode regression.
+Physical devices, WAN, sixteen firmware instances and full captured-binary serial
+parity remain unqualified. SDK reproduction and receipts:
+`sdk/paradise/net/tests/hosted/README.md`; local audit root
+`TamaSuite-validation/hosted-mode-audit-20261017/`.
+
+Build `tama-protocol` before starting the service: it imports compiled workspace
+exports. Test source imports alone cannot prove the running server is current.
+Before deployment, package the new BIN and stage on the server's Node version;
+nginx must route both new paths before `HOSTED_GAMES=1` is enabled. No live
+server, proxy or auto-update feed was changed by this implementation.
+
+## Following hosted-match qualification
+
+User-requested order (2026-10-17): browser removal of the verified music bank;
+then source-client live board/score telemetry for Blocks and Pocket Puzzle;
+then small, separate per-game casual high-score tables in existing SQLite.
+No browser audio. These are not part of the recovered TET3 device protocol.
+The SDK `docs/ONLINE_UART_ROADMAP.md` records ownership/removal safeguards,
+telemetry bandwidth/queue boundaries and device-reported score limitations.
+Finish match lifecycle/reconnection qualification before adding visual traffic.
