@@ -37,10 +37,13 @@ export class GameRoom {
       await this.api(`/game-rooms/${this.entry.code}/leave`, { token: this.entry.token });
       this.clear(); this.status("You left the room. Your adapter can stay connected."); await this.refresh();
     }));
+    el("group-copy-code").addEventListener("click", () => {
+      if (this.entry) this.copy(this.entry.code, "Room code copied.");
+    });
     el("group-copy").addEventListener("click", () => {
       if (!this.entry) return;
       const url = new URL(location.href); url.searchParams.set("game", this.entry.game); url.searchParams.set("mode", this.mode); url.searchParams.set("room", this.entry.code);
-      void navigator.clipboard.writeText(url.href).then(() => this.status("Invite link copied."), () => this.status("Share the room code shown above."));
+      this.copy(url.href, "Invite link copied.");
     });
     el("group-action").addEventListener("click", () => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) { if (this.entry) this.enter(this.entry); return; }
@@ -75,6 +78,7 @@ export class GameRoom {
   }
   gameChanged() { if (!this.active && this.available) void this.refresh(); }
   update() { this.syncAdapter(); this.render(); }
+  adapterConnected() { this.syncAdapter(true); this.render(); }
   releaseAdapter() {
     this.bridge?.stop(); this.bridge = undefined; this.connectingAdapter = false;
     this.toyObserver.reset(); this.toyMode = undefined;
@@ -100,6 +104,9 @@ export class GameRoom {
   }
   private self() { return this.snapshot?.members.find(m => m.id === this.entry?.memberId); }
   private send(control: object) { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(control)); }
+  private copy(text: string, message: string) {
+    void navigator.clipboard.writeText(text).then(() => this.status(message), () => this.status("Copy the room code shown above."));
+  }
   private status(text: string) { el("group-status").textContent = text; }
   private async run(action: () => Promise<void>) {
     if (this.busy || this.hooks.busy()) return; this.busy = true; this.render();
@@ -140,9 +147,10 @@ export class GameRoom {
         if (data.type === "error") { this.status(data.message); return; }
         if (data.type !== "game-room" || data.code !== entry.code || data.game !== entry.game) return;
         const previous = this.snapshot; this.snapshot = data;
-        if (this.mode === "direct" && this.bridge && previous?.members.find(m => m.id === this.entry?.memberId)?.adapter && this.self()?.reason && !this.self()?.adapter) {
+        if (this.mode === "direct" && this.bridge && !this.connectingAdapter && previous?.members.find(m => m.id === this.entry?.memberId)?.adapter && this.self()?.reason && !this.self()?.adapter) {
           this.bridge.stop(); this.bridge = undefined; this.directResult = "Disconnected";
         }
+        if (this.self()?.adapter) this.connectingAdapter = false;
         if (!previous) this.status("");
         // A reset deliberately ends all old toy sessions. Wait for the player's
         // explicit reconnect after returning their toy to its Online menu.
@@ -186,7 +194,7 @@ export class GameRoom {
         }
         if (changed) this.render();
       } });
-    this.bridge.start(); this.send({ type: "adapter", connected: true }); this.connectingAdapter = false;
+    this.bridge.start(); this.send({ type: "adapter", connected: true });
   }
   private render() {
     const supported = this.available;

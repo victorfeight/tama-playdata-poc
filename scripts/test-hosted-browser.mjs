@@ -49,13 +49,36 @@ try {
   const [host, guest] = pages;
   await host.locator('#group-public').check(); await host.locator('#group-create').click();
   await host.locator('#group-current:not([hidden])').waitFor();
+  await host.waitForFunction(() => document.querySelector('#group-players').textContent.includes('Fern'));
   const code = await host.locator('#group-code').textContent();
+  await host.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.copiedText = text; } } }));
+  await host.locator('#group-copy-code').click();
+  assert.equal(await host.evaluate(() => window.copiedText), code);
+  await host.locator('#group-copy').click();
+  const invite = new URL(await host.evaluate(() => window.copiedText));
+  assert.equal(invite.searchParams.get('room'), code); assert.equal(invite.searchParams.get('mode'), mode);
+  checks.push('Separate Copy code and Copy invite link actions preserve the exact room and mode');
   await guest.locator('#group-refresh').click();
   await guest.waitForFunction(() => document.querySelector('#group-list').textContent.includes('Fern’s room'));
   assert((await guest.locator('#group-list').textContent()).includes(mode === 'direct' ? '1/2' : '1/16'));
   if (mode === 'direct') await guest.locator('#group-list button').filter({ hasText: 'Fern’s room' }).click();
   else { await guest.locator('#group-code-input').fill(code); await guest.locator('#group-join').click(); }
   await guest.locator('#group-current:not([hidden])').waitFor();
+  // Explicit USB disconnect/reconnect must reattach the room, not leave a stale
+  // 'connect toy' card behind a physically Connected label.
+  await host.waitForFunction(() => document.querySelector('#group-players').textContent.includes('waiting for Online') || document.querySelector('#group-players').textContent.includes('adapter connected'));
+  await host.locator('#connect').click();
+  await host.waitForFunction(() => document.querySelector('#device-state').textContent === 'Not connected');
+  // Returning to the game menu resets the toy's old protocol session.
+  await command(`I 2 ${now()} ${mode === 'direct' ? 1 : 0}`);
+  await host.locator('#connect').click();
+  await host.waitForFunction(() => document.querySelector('#group-players li').textContent.includes('waiting for Online') || document.querySelector('#group-players li').textContent.includes('adapter connected'));
+  // Direct peer loss intentionally detaches both ends; the peer reconnects once.
+  if (mode === 'direct') {
+    await guest.waitForFunction(() => !document.querySelector('#group-action').hidden);
+    await guest.locator('#group-action').click();
+  }
+  checks.push('Explicit USB reconnect restores the room adapter status without a second local reconnect action');
   for (const page of pages) {
     assert((await page.locator('#toy-mode-hint').textContent()).includes(mode === 'hosted' ? 'Choose Online' : 'Choose Versus'));
     assert.equal(await page.locator('#payload-link').count(), 0);
@@ -72,7 +95,7 @@ try {
   if (mode === 'hosted') for (const page of pages) await page.waitForFunction(() => document.querySelector('#group-action').textContent === 'I’m ready' && !document.querySelector('#group-action').disabled);
   for (const page of pages) {
     assert(await page.locator('#install-actions').isHidden(), 'Game setup should be tucked away in an active room');
-    assert.equal(await page.locator('#group-status').textContent(), '');
+    assert(['', 'Invite link copied.'].includes(await page.locator('#group-status').textContent()));
     assert(!(await page.locator('#group-instruction').textContent()).includes('Your toy is in Versus'));
   }
   checks.push(`Two real browsers, named public room, distinct credentials, native HELLO/READY through WebSerial and ${mode} service`);

@@ -52,7 +52,7 @@ connect.addEventListener("click", () => void run(async () => {
   const selected = await requestParadiseSerialPort();
   try { await selected.open({ baudRate: 460800 }); }
   catch (error) { await selected.close(); throw error; }
-  serial = selected; status("Connected. Keep this page open while you play.");
+  serial = selected; room?.adapterConnected(); status("Connected. Keep this page open while you play.");
 }));
 window.addEventListener("pagehide", () => { room?.close(); void serial?.close(); });
 function installProgress(value: InstallProgress) {

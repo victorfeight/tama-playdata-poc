@@ -1,8 +1,21 @@
-# Named game rooms and mode guidance — release candidate
+# Named game rooms and mode guidance — published preview
 
-Local implementation and qualification complete; deployment requires the current
-live room to finish before restarting the relay. This file is not proof of a
-production publication. SDK main: `ae94ad9`.
+Application `4cddad4` published at 2026-10-17 22:06:54 UTC. SDK main: `ae94ad9`.
+Receipt: `/srv/game-demo/releases/game-rooms-4cddad4/deployment.json`.
+Server Node 20 suite: all 53 tests passed before publication.
+
+Physical retest remains blocked: a private 12-second trace of the current two-toy
+Versus room shows 23 valid HELLO frames per toy, distinct nonces, matching
+0x50500102 modes, byte-exact forwarding, and no READY in either direction.
+This rules out a mode mismatch for this attempt; device RX acceptance is under
+investigation. Do not describe the physical connection issue as resolved.
+
+Page follow-up: separate Copy code/Copy invite link; explicit USB reconnect also
+reattaches the room adapter. Pending disconnect snapshots cannot tear down that
+fresh bridge before its adapter acknowledgement. Both direct/hosted browser
+checks pass, including clipboard and disconnect/reconnect. Public browser tests
+initially refreshed the directory before the host WebSocket attached; the harness
+now waits for membership confirmation before checking the public directory.
 
 ## What changes for players
 
