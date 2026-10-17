@@ -61,6 +61,30 @@ are passive; they do not establish corruption of the forwarded bytes.
 
 ## Hardware incident: unresolved root cause
 
+### Integrated outcome recovery and timed cue (local, 2026-10-17)
+
+The isolated outcome work `06b36c4` is merged alongside hosted games. Its
+passive observer returns both capable browser clients to preparation only for
+a framed CAN while a transfer is pending. UART forwarding happens first and is
+unchanged. Normal exchange shows no recovery advice or retry button. Unknown
+silence remains unknown; a result/SYNC never means saved. Research and bounded
+native evidence are retained in `research/playdate-outcome/` and summarized in
+`PLAYDATE_OUTCOME_HANDOFF.md`.
+
+The selected starter now receives a highlighted, nonblocking “Press B now”
+callout and decreasing progress bar. It uses the existing eight-second human
+coordination window, not a firmware timeout. The receiver still confirms freshly
+opening Playdate. Repeated snapshots cannot extend the same local deadline;
+visibility changes recompute it. Traffic, expiry or changed connection/roles
+remove the cue. Timer updates are outside the polite announcement region, so
+screen readers announce the instruction rather than every countdown tick.
+No animation, extra acknowledgement, synthetic B or new room control is added.
+
+Local integrated checks: 51 relay tests and 10 real two-browser check groups
+with simulated UART. Evidence root: `TamaSuite-validation/hosted-mode-audit-20261017/`,
+`playdate-integrated/browser.json`, `relay-integrated.log`. Public deployment
+and physical two-player checks must be recorded separately after staging.
+
 The user reported a failed live attempt with 99 bytes in and zero bytes out on
 the guest, matching repeated host `PKT 2` and cancellation. The guest received
 no local UART response during that attempt. The user subsequently reported a

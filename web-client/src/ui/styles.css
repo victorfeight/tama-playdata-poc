@@ -63,6 +63,10 @@ h3 { font-size: 1.25rem; font-weight: 500; margin: 0; }
 .eyebrow { font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: #47724b; margin: 0 0 6px; }
 .field { display: grid; gap: 7px; font-size: .85rem; font-weight: 600; }
 .hint { margin: 7px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.5; }
+.next-step.start-now { background: #fff4bf; border: 1px solid #d4be6c; border-radius: 10px; padding: 16px; margin-top: 16px; }
+#start-window { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+#start-window progress { flex: 1; min-width: 0; height: 10px; accent-color: #47724b; }
+#start-window-label { font-size: .8rem; color: var(--muted); white-space: nowrap; }
 .create-controls { display: grid; gap: 14px; margin: 22px 0; }
 .checkbox { display: flex; gap: 9px; align-items: center; font-size: .8rem; color: var(--muted); cursor: pointer; }
 .checkbox input { width: 17px; height: 17px; min-height: 17px; margin: 0; accent-color: #397844; }

@@ -28,6 +28,16 @@ try {
   const makePage = async () => {
     const context = await browser.newContext({ viewport: { width: 1365, height: 1000 } });
     await context.addInitScript(() => {
+      const NativeWebSocket = window.WebSocket;
+      window.WebSocket = class extends NativeWebSocket {
+        constructor(...args) {
+          super(...args);
+          this.addEventListener('message', event => {
+            if (typeof event.data !== 'string') return;
+            try { if (JSON.parse(event.data).startPrompt === 'ready') { window.readySocket = this; window.readySnapshot = event.data; } } catch {}
+          });
+        }
+      };
       const serial = new EventTarget();
       serial.requestPort = async () => ({
         async open() {
@@ -103,13 +113,26 @@ try {
   await host.locator('#start-prompt').click();
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Press B now');
   await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Wait—your friend is starting');
+  assert(await guest.locator('#start-window').isVisible());
+  assert(await host.locator('#start-window').isHidden());
+  const readyValue = await guest.locator('#start-window-progress').evaluate(p => p.value);
+  await guest.waitForFunction(v => document.querySelector('#start-window-progress').value < v - 200, readyValue);
+  await guest.evaluate(() => {
+    const progress = document.querySelector('#start-window-progress'), before = progress.value;
+    window.readySocket.dispatchEvent(new MessageEvent('message', { data: window.readySnapshot }));
+    document.dispatchEvent(new Event('visibilitychange'));
+    if (progress.value > before) throw new Error('Repeated readiness snapshot extended the window');
+  });
+  await guest.screenshot({ path: `${output}/press-b-now.png`, fullPage: true });
   assert.deepEqual(await guest.evaluate(() => window.uartWrites), [[1, 2, 3, 4]]);
   await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Go to Connection → Playdate and wait now', null, { timeout: 12000 });
+  assert(await guest.locator('#start-window').isHidden());
   await host.locator('#start-prompt').click();
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Press B now');
   await guest.evaluate(() => window.enqueueUart([80, 75, 84, 32, 50, 13, 10]));
   await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Follow your toy');
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Follow your toy');
+  assert(await guest.locator('#start-window').isHidden());
   assert(!(await host.locator('#start-prompt').isVisible()));
   assert(!(await guest.locator('#start-prompt').isVisible()));
   assert(!/fail|retry|another attempt/i.test(await guest.locator('#next-instruction').textContent()));
@@ -125,6 +148,7 @@ try {
   await host.locator('#start-prompt').click();
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Press B now');
   checks.push('Framed CAN returns both pages to preparation; normal exchange hides retry advice/buttons; receiver must freshly confirm');
+  checks.push('Starter-only readiness countdown shrinks, expires without claiming failure, and disappears on toy traffic');
   checks.push('Ready request and receiver confirmation update both pages; readiness expires; real toy bytes end the prompt without claiming success; controls never generate UART');
 
   await host.screenshot({ path: `${output}/desktop-paired.png`, fullPage: true });

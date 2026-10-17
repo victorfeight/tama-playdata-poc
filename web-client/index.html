@@ -16,9 +16,15 @@
       <section class="device" aria-label="Playdate scene and room">
         <div class="scene-column">
           <canvas id="link-canvas" width="800" height="520" aria-label="Your Paradise and your friend’s Paradise. Ghosts and friendship appear during the exchange."></canvas>
-          <section class="next-step" aria-live="polite" aria-atomic="true">
+          <section id="next-step" class="next-step">
+            <div role="status" aria-live="polite" aria-atomic="true">
             <p class="eyebrow">Your next step</p><h2 id="next-heading">A Playdate, wherever you are</h2>
             <p id="next-instruction">Find someone in an open room, or create a room for a friend. Connect your adapter whenever you’re ready.</p>
+            </div>
+            <div id="start-window" hidden>
+              <progress id="start-window-progress" max="8000" value="0" aria-label="Time left to start this Playdate"></progress>
+              <span id="start-window-label" aria-hidden="true"></span>
+            </div>
             <button id="start-prompt" type="button" hidden>Ask friend to get ready</button>
           </section>
         </div>
@@ -48,7 +54,7 @@
                 <button id="start-friend" type="button" class="secondary" aria-pressed="false">My friend</button>
               </div>
               <p id="starter-summary" class="hint" role="status"></p>
-              <p class="hint">Choose before starting. Either player can press B; the other waits.</p>
+              <p class="hint">Choose before starting. Only the selected player presses B.</p>
             </fieldset>
             <button id="reconnect-room" type="button" class="full-width" data-room-action hidden>Reconnect to room</button>
           </section>

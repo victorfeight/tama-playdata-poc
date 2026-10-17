@@ -17,6 +17,7 @@ export class PlaydateLobby {
   private peerSignature = "";
   private readyUntil = 0;
   private readyTimer: ReturnType<typeof setTimeout> | undefined;
+  private showStartWindow = false;
   private rooms: LobbyListing[] = [];
   private readonly nickname = element<HTMLInputElement>("nickname");
   private readonly code = element<HTMLInputElement>("room-code");
@@ -71,6 +72,7 @@ export class PlaydateLobby {
     else void this.refresh();
     // Quiet refresh only while browsing; no live region chatter or focus loss.
     setInterval(() => { if (!document.hidden && !this.entry) void this.refresh(); }, 15_000);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) this.render(); });
   }
 
   get roomCode(): string | undefined { return this.entry?.code; }
@@ -129,11 +131,13 @@ export class PlaydateLobby {
         let update: LobbySnapshot;
         try { update = JSON.parse(event.data); } catch { return; }
         if (update.type !== "lobby" || update.code !== this.entry?.code) return;
+        const wasReady = this.snapshot?.startPrompt === "ready";
         this.snapshot = update;
-        clearTimeout(this.readyTimer);
         const remaining = Math.max(0, Math.min(8000, update.readyForMs ?? 0));
-        this.readyUntil = performance.now() + remaining;
-        if (remaining) this.readyTimer = setTimeout(() => this.render(), remaining + 1);
+        const deadline = performance.now() + remaining;
+        // Repeated snapshots cannot restart or extend the same confirmation.
+        // This is a human coordination window, not a firmware failure timeout.
+        this.readyUntil = update.startPrompt === "ready" ? wasReady ? Math.min(this.readyUntil, deadline) : deadline : 0;
         const peer = update.members.find(m => m.id !== this.entry?.memberId);
         const signature = peer ? `${peer.id}:${peer.connection}:${peer.connected}:${peer.adapterConnected}` : "";
         if (signature !== this.peerSignature) { this.peerSignature = signature; this.hooks.peerChanged(); }
@@ -261,6 +265,7 @@ export class PlaydateLobby {
         : adapter === null ? "In room · check adapter in their app" : adapter ? "In room · adapter connected" : "In room · connect adapter";
       text.append(name, state); row.append(dot, text); return row;
     }));
+    this.showStartWindow = false;
     const heading = element("next-heading"), instruction = element("next-instruction");
     const prompt = element<HTMLButtonElement>("start-prompt");
     prompt.hidden = true;
@@ -281,8 +286,8 @@ export class PlaydateLobby {
     } else {
       heading.textContent = iStart ? "Press B once" : "Open Playdate and wait";
       instruction.textContent = iStart
-        ? "On both toys: Menu → Connection → Playdate. Once your friend is waiting on that screen, press B on your toy once. "
-        : "On both toys: Menu → Connection → Playdate. Stay on that screen without pressing B; your friend presses B to start. ";
+        ? "On both toys: Menu → Connection → Playdate. Once your friend is waiting on that screen, press B on your toy once."
+        : "On both toys: Menu → Connection → Playdate. Stay on that screen without pressing B; your friend presses B to start.";
       if (peer.adapterConnected === null)
         instruction.textContent = "First, ask your friend to start the adapter bridge in their app. " + instruction.textContent;
       if (this.snapshot?.canChooseStarter) {
@@ -298,12 +303,13 @@ export class PlaydateLobby {
         } else if (this.snapshot.outcome === "interrupted") {
           heading.textContent = "The exchange stopped";
           instruction.textContent = iStart
-            ? "A toy cancelled the transfer. Reopen Playdate on both toys; your friend will confirm when ready."
-            : "A toy cancelled the transfer. Reopen Playdate, then confirm here. Don’t press B.";
+            ? "Reopen Playdate on both toys. Your friend will confirm when ready."
+            : "Reopen Connection → Playdate, then confirm here. Don’t press B.";
         } else if (ready) {
+          this.showStartWindow = iStart;
           heading.textContent = iStart ? "Press B now" : "Wait—your friend is starting";
           instruction.textContent = iStart
-            ? "Your friend says they’re on Playdate. Open Playdate on your toy and press B once."
+            ? "Your friend is ready. On your Paradise, open Connection → Playdate and press B once now."
             : "Stay on Playdate without pressing B. We’ve told your friend to press B on their toy.";
         } else if (requested) {
           heading.textContent = iStart ? "Waiting for your friend’s ready" : "Go to Connection → Playdate and wait now";
@@ -318,6 +324,24 @@ export class PlaydateLobby {
         }
       }
     }
+    this.updateStartWindow();
+  }
+
+  private updateStartWindow(): void {
+    clearTimeout(this.readyTimer);
+    const remaining = Math.max(0, this.readyUntil - performance.now());
+    const ready = this.snapshot?.startPrompt === "ready" && remaining > 0 && this.socket?.readyState === WebSocket.OPEN;
+    const visible = !!ready && this.showStartWindow;
+    element("start-window").hidden = !visible;
+    element("next-step").classList.toggle("start-now", visible);
+    if (visible) {
+      element<HTMLProgressElement>("start-window-progress").value = remaining;
+      element("start-window-label").textContent = `${Math.ceil(remaining / 1000)}s to start`;
+    }
+    if (ready) this.readyTimer = setTimeout(() => {
+      if (performance.now() >= this.readyUntil) this.render();
+      else this.updateStartWindow();
+    }, Math.min(200, remaining + 1));
   }
 }
 
