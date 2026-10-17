@@ -110,8 +110,14 @@ try {
   await guest.evaluate(() => window.enqueueUart([80, 75, 84, 32, 50, 13, 10]));
   await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Follow your toy');
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Follow your toy');
+  assert(await guest.locator('#start-prompt').isHidden());
+  assert(await host.locator('#start-prompt').isHidden());
+  assert(!(await guest.locator('#next-instruction').textContent()).includes('fails'));
+  // A known adapter disconnect clears the attempt. Decoder warnings do not.
+  await guest.locator('#connect-serial').click();
+  await guest.locator('#connect-serial').click();
+  await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’ll press B');
   await guest.locator('#start-prompt').click();
-  await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Go to Connection → Playdate and wait now');
   await host.locator('#start-prompt').click();
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Press B now');
   checks.push('Ready request and receiver confirmation update both pages; readiness expires; real toy bytes end the prompt without claiming success; controls never generate UART');

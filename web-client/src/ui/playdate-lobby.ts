@@ -293,9 +293,8 @@ export class PlaydateLobby {
         prompt.disabled = iStart && this.snapshot.startPrompt === "prepare";
         if (this.snapshot.startPrompt === "started") {
           heading.textContent = "Follow your toy";
-          instruction.textContent = "Toy data has started. Follow the steps on your Paradise. If the connection fails, reopen Playdate on both toys and prepare another attempt.";
-          prompt.hidden = !iStart;
-          prompt.textContent = "Prepare another attempt";
+          instruction.textContent = "Toy data has started. Follow the steps on your Paradise.";
+          prompt.hidden = true;
         } else if (ready) {
           heading.textContent = iStart ? "Press B now" : "Wait—your friend is starting";
           instruction.textContent = iStart
