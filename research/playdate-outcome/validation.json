@@ -1,0 +1,34 @@
+{
+  "recordedAtUtc": "2026-10-17T19:21:16.678440+00:00",
+  "baseCommit": "569b710",
+  "scope": "Focused evidence summary, not a full repository test-suite pass or device qualification",
+  "checks": {
+    "nativeTransport": 72,
+    "nativeGen2BreedingBranches": 12,
+    "newNativeFaultOrCancelCases": 3,
+    "captureReplayExpectations": 5,
+    "outcomeUnitTests": 10,
+    "lobbyTests": 11,
+    "ghostPipelineAndRenderRegressionTests": 4,
+    "browserGroups": 9,
+    "typescriptPackages": [
+      "tama-protocol",
+      "relay-server",
+      "web-client"
+    ],
+    "viteBuild": true
+  },
+  "limitations": [
+    "Wider protocol run stopped after missing default ghost fixture; affected pipeline/render tests passed with explicit actual Home fixture.",
+    "Silent failure and cancellation cannot be detected from absent UART.",
+    "No end-to-end breeding/save or physical toy qualification.",
+    "Native pair replay retained prior successful capture; this turn did not rerun the success pair."
+  ],
+  "sourceSha256": {
+    "tama-protocol/src/playdate-outcome.ts": "c6d826fab5c8edff244cc5edde639ae8998e85c4ad43a6b36560a0bf959d769a",
+    "tama-protocol/src/tcp-observer.ts": "0bc4a45d59f95480e4474468962021b7bdf7e4d1c26cb769ebe66237996ede7b",
+    "relay-server/src/lobby.ts": "d2ef7c54e0180de211e51785e0feb908cae5e8669b3b90ce96607644adf382e2",
+    "web-client/src/ui/playdate-lobby.ts": "38ae8461d2d7f37722c5fadc19141b33a14c2ffecf768948f772ee302b4ebcca",
+    "scripts/test-playdate-lobby-browser.mjs": "09f107c191e10b0c2c7c339e75c26307a45cdf793e4a67dfee7cc0eeb29b70e8"
+  }
+}

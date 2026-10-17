@@ -1,0 +1,233 @@
+{
+  "scope": "Full native Tropical: unanswered start and pre-transfer C. No host RAM writes.\nSDK fixture's prepared adult provenance is retained in relay-readiness.\n",
+  "hashes": {
+    "private/artifacts/playdate-families/tropical-gameplay.bin": "aed9a7b8ecb9227c8deaa7bb223fa2115f1239d0a38e0855afe009e290d916c1",
+    "toolchains/emulator-release/libparadise_native.so": "8ec0f8b3523b5cd0f03b11d1b8d08a347cf82c503640b3b683c3cb860efe7554",
+    "vendor/tamasuite/fields_native_probe.py": "b96674465f57511a341540d491a10c918669121b617b9b39247feea680c67934",
+    "src/AnimationLab/evidence/relay-readiness/tropical-ready-inputs.txt": "0639ec860f04bd938f4d5a7556ebe85644864e175081565319b5b773f9f8ad22"
+  },
+  "cases": [
+    {
+      "label": "unanswered-request",
+      "wireHex": "504b5420320d0a504b5420320d0a504b5420320d0a504b5420320d0a43414e0d0a",
+      "wireSha256": "ba05efd9abe39bf952db1e1d54a7b17a9b5c5d20fb19d4ee226675d30dc20742",
+      "wireEvents": [
+        {
+          "atMs": 20,
+          "sender": 0,
+          "offset": 0,
+          "bytes": 7
+        },
+        {
+          "atMs": 1640,
+          "sender": 0,
+          "offset": 7,
+          "bytes": 7
+        },
+        {
+          "atMs": 3280,
+          "sender": 0,
+          "offset": 14,
+          "bytes": 7
+        },
+        {
+          "atMs": 4920,
+          "sender": 0,
+          "offset": 21,
+          "bytes": 7
+        },
+        {
+          "atMs": 6560,
+          "sender": 0,
+          "offset": 28,
+          "bytes": 5
+        }
+      ],
+      "states": [
+        {
+          "atMs": 20,
+          "transport": {
+            "object": "0x180091fc",
+            "flags": 34,
+            "receiveRequested": false,
+            "transferActive": false,
+            "automaticAccept": false,
+            "requestedBytes": 2,
+            "scope": "Stock Tropical request/accept flags; not native scene completion"
+          },
+          "controller": "0x18006018",
+          "mode": 1000,
+          "substate": 1000
+        },
+        {
+          "atMs": 340,
+          "transport": {
+            "object": "0x180091fc",
+            "flags": 34,
+            "receiveRequested": false,
+            "transferActive": false,
+            "automaticAccept": false,
+            "requestedBytes": 2,
+            "scope": "Stock Tropical request/accept flags; not native scene completion"
+          },
+          "controller": "0x18006018",
+          "mode": 1000,
+          "substate": 1001
+        },
+        {
+          "atMs": 660,
+          "transport": {
+            "object": "0x180091fc",
+            "flags": 34,
+            "receiveRequested": false,
+            "transferActive": false,
+            "automaticAccept": false,
+            "requestedBytes": 2,
+            "scope": "Stock Tropical request/accept flags; not native scene completion"
+          },
+          "controller": "0x18006018",
+          "mode": 1000,
+          "substate": 1002
+        },
+        {
+          "atMs": 6560,
+          "transport": {
+            "object": "0x180091fc",
+            "flags": 0,
+            "receiveRequested": false,
+            "transferActive": false,
+            "automaticAccept": false,
+            "requestedBytes": 2,
+            "scope": "Stock Tropical request/accept flags; not native scene completion"
+          },
+          "controller": "0x18006018",
+          "mode": 9000,
+          "substate": 0
+        },
+        {
+          "atMs": 6900,
+          "transport": {
+            "object": "0x180091fc",
+            "flags": 0,
+            "receiveRequested": false,
+            "transferActive": false,
+            "automaticAccept": false,
+            "requestedBytes": 2,
+            "scope": "Stock Tropical request/accept flags; not native scene completion"
+          },
+          "controller": "0x18006018",
+          "mode": 9000,
+          "substate": 1
+        },
+        {
+          "atMs": 15740,
+          "transport": {
+            "object": "0x180091fc",
+            "flags": 0,
+            "receiveRequested": false,
+            "transferActive": false,
+            "automaticAccept": false,
+            "requestedBytes": 2,
+            "scope": "Stock Tropical request/accept flags; not native scene completion"
+          },
+          "controller": "0x18006018",
+          "mode": 32736,
+          "substate": 0
+        }
+      ],
+      "finalMachine": {
+        "pc": "0x1006b186",
+        "link_register": "0x1006b187",
+        "instructions": 87460227,
+        "cycles": 4292000000,
+        "display_revision": 14581760,
+        "systick_count": 44679,
+        "sleeping": 0,
+        "error": ""
+      }
+    },
+    {
+      "label": "pre-transfer-cancel",
+      "wireHex": "",
+      "wireSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "wireEvents": [],
+      "states": [
+        {
+          "atMs": 20,
+          "transport": {
+            "object": "0x180091fc",
+            "flags": 0,
+            "receiveRequested": false,
+            "transferActive": false,
+            "automaticAccept": false,
+            "requestedBytes": 0,
+            "scope": "Stock Tropical request/accept flags; not native scene completion"
+          },
+          "controller": "0x18006018",
+          "mode": 32736,
+          "substate": 0
+        },
+        {
+          "atMs": 60,
+          "transport": {
+            "object": "0x180091fc",
+            "flags": 0,
+            "receiveRequested": false,
+            "transferActive": false,
+            "automaticAccept": false,
+            "requestedBytes": 0,
+            "scope": "Stock Tropical request/accept flags; not native scene completion"
+          },
+          "controller": "0x18006018",
+          "mode": 32752,
+          "substate": 0
+        },
+        {
+          "atMs": 100,
+          "transport": null,
+          "controller": "0x18006018",
+          "mode": 1000,
+          "substate": 0
+        },
+        {
+          "atMs": 140,
+          "transport": null,
+          "controller": "0x18006018",
+          "mode": 1000,
+          "substate": 1
+        },
+        {
+          "atMs": 8160,
+          "transport": null,
+          "controller": "0x18006018",
+          "mode": 32752,
+          "substate": 0
+        },
+        {
+          "atMs": 8480,
+          "transport": null,
+          "controller": "0x18006018",
+          "mode": 1000,
+          "substate": 0
+        },
+        {
+          "atMs": 8800,
+          "transport": null,
+          "controller": "0x18006018",
+          "mode": 1000,
+          "substate": 1
+        }
+      ],
+      "finalMachine": {
+        "pc": "0x6a80",
+        "link_register": "0x1007ba7d",
+        "instructions": 107119769,
+        "cycles": 4293960422,
+        "display_revision": 14598144,
+        "systick_count": 44727,
+        "sleeping": 0,
+        "error": ""
+      }
+    }
+  ]
+}

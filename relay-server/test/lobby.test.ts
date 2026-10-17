@@ -57,6 +57,38 @@ describe("Playdate lobby membership", () => {
     sb.close(1000);
     expect(sa.snapshot().startPrompt).toBeUndefined();
   });
+  it("shares a framed abort, preserves every raw byte, and requires fresh receiver readiness", async () => {
+    setup();
+    const a = hub.create("A", "private"), b = hub.join(a.code, "B");
+    const sa = new Socket(), sb = new Socket(); hub.attach(a.code, a.token, sa.ws); hub.attach(a.code, b.token, sb.ws);
+    const control = (s: Socket, value: object) => s.emit("message", Buffer.from(JSON.stringify(value)), false);
+    for (const s of [sa, sb]) control(s, { type: "adapter", connected: true, starterChoice: true });
+    control(sb, { type: "start-prompt", action: "prepare" });
+    control(sa, { type: "start-prompt", action: "ready" });
+    const wire = Buffer.from("PKT 2\r\nPKT 2\r\nPKT 2\r\nPKT 2\r\nCAN\r\n");
+    sb.emit("message", wire, true);
+    expect(sa.messages.filter(m => m.binary).at(-1)?.data).toEqual(wire);
+    await vi.waitFor(() => expect(sa.snapshot().outcome).toBe("interrupted"));
+    expect(sa.snapshot().startPrompt).toBe("prepare");
+    expect(sb.snapshot().outcome).toBe("interrupted");
+    expect(sa.snapshot().starterId).toBe(b.memberId);
+    // Nothing reopens the eight-second window until the receiver confirms again.
+    expect(sa.snapshot().readyForMs).toBeUndefined();
+    control(sa, { type: "start-prompt", action: "ready" });
+    expect(sa.snapshot()).toMatchObject({ startPrompt: "ready", outcome: "exchanging", readyForMs: 8000 });
+  });
+  it("ignores queued evidence from an attempt abandoned by a starter switch", async () => {
+    setup();
+    const a = hub.create("A", "private"), b = hub.join(a.code, "B");
+    const sa = new Socket(), sb = new Socket(); hub.attach(a.code, a.token, sa.ws); hub.attach(a.code, b.token, sb.ws);
+    const control = (s: Socket, value: object) => s.emit("message", Buffer.from(JSON.stringify(value)), false);
+    for (const s of [sa, sb]) control(s, { type: "adapter", connected: true, starterChoice: true });
+    control(sb, { type: "start-prompt", action: "prepare" }); control(sa, { type: "start-prompt", action: "ready" });
+    sb.emit("message", Buffer.from("PKT 2\r\nCAN\r\n"), true);
+    control(sa, { type: "starter", memberId: a.memberId });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(sa.snapshot().outcome).toBeUndefined(); expect(sa.snapshot().starterId).toBe(a.memberId);
+  });
   it("shares one starter, preserves reconnects, and never injects selection into UART", () => {
     setup();
     const a = hub.create("A", "private"), b = hub.join(a.code, "B");

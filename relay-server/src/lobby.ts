@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { WebSocket, type RawData } from "ws";
-import type { LobbyEntry, LobbyListing, LobbyMember, LobbySnapshot } from "@tama-breed-poc/tama-protocol";
+import { PlaydateOutcomeObserver } from "@tama-breed-poc/tama-protocol";
+import type { LobbyEntry, LobbyListing, LobbyMember, LobbySnapshot, PlaydateOutcome } from "@tama-breed-poc/tama-protocol";
 
 interface Member extends LobbyMember {
   token: string;
@@ -17,6 +18,8 @@ interface Room {
   starterId?: string | undefined;
   startPrompt?: "prepare" | "ready" | "started" | undefined;
   readyUntil?: number | undefined;
+  observation?: PlaydateOutcomeObserver | undefined;
+  outcome?: PlaydateOutcome | undefined;
   readyTimer?: ReturnType<typeof setTimeout> | undefined;
 }
 
@@ -128,7 +131,8 @@ export class LobbyHub {
       if (binary) {
         if (bytes.length > 256 * 1024) { ws.close(1009, "Serial message too large"); return; }
         if (bytes.length && room.startPrompt === "ready" && member.id === room.starterId) {
-          this.resetStart(room);
+          if (room.readyTimer) clearTimeout(room.readyTimer);
+          room.readyTimer = undefined; room.readyUntil = undefined;
           room.startPrompt = "started";
           this.broadcast(room);
         }
@@ -137,6 +141,7 @@ export class LobbyHub {
           if (peer.ws.bufferedAmount > 1024 * 1024) peer.ws.close(1013, "Connection too slow; reconnect and retry");
           else peer.ws.send(bytes, { binary: true });
         }
+        room.observation?.push(member.slot === 0 ? 0 : 1, bytes);
         return;
       }
       if (this.now() - controlWindow >= 1000) { controls = 0; controlWindow = this.now(); }
@@ -163,6 +168,19 @@ export class LobbyHub {
             this.broadcast(room);
           } else if (message.action === "ready" && member.id !== room.starterId && room.startPrompt === "prepare") {
             room.startPrompt = "ready";
+            const observation = new PlaydateOutcomeObserver(outcome => {
+              if (room.observation !== observation) return;
+              room.outcome = outcome;
+              if (outcome === "interrupted") {
+                observation.stop();
+                if (room.readyTimer) clearTimeout(room.readyTimer);
+                room.readyTimer = undefined; room.readyUntil = undefined;
+                room.startPrompt = "prepare";
+              }
+              this.broadcast(room);
+            });
+            room.observation?.stop();
+            room.observation = observation; room.outcome = "exchanging";
             room.readyUntil = this.now() + 8000;
             room.readyTimer = setTimeout(() => {
               this.resetStart(room);
@@ -228,7 +246,7 @@ export class LobbyHub {
     const snapshot: LobbySnapshot = {
       type: "lobby", code: room.code, activity: "playdate", visibility: room.visibility, capacity: 2,
       starterId: room.starterId, canChooseStarter: this.canChooseStarter(room),
-      startPrompt: room.startPrompt,
+      startPrompt: room.startPrompt, outcome: room.outcome,
       readyForMs: room.readyUntil === undefined ? undefined : Math.max(0, room.readyUntil - this.now()),
       members: room.members.map(({ id, nickname, slot, connected, adapterConnected, connection }) =>
         ({ id, nickname, slot, connected, adapterConnected, connection }))
@@ -251,6 +269,8 @@ export class LobbyHub {
   }
 
   private resetStart(room: Room): void {
+    room.observation?.stop();
+    room.observation = undefined; room.outcome = undefined;
     if (room.readyTimer) clearTimeout(room.readyTimer);
     room.readyTimer = undefined;
     room.readyUntil = undefined;

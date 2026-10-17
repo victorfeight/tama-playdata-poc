@@ -110,16 +110,21 @@ try {
   await guest.evaluate(() => window.enqueueUart([80, 75, 84, 32, 50, 13, 10]));
   await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Follow your toy');
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Follow your toy');
-  assert(await guest.locator('#start-prompt').isHidden());
-  assert(await host.locator('#start-prompt').isHidden());
-  assert(!(await guest.locator('#next-instruction').textContent()).includes('fails'));
-  // A known adapter disconnect clears the attempt. Decoder warnings do not.
-  await guest.locator('#connect-serial').click();
-  await guest.locator('#connect-serial').click();
-  await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’ll press B');
-  await guest.locator('#start-prompt').click();
+  assert(!(await host.locator('#start-prompt').isVisible()));
+  assert(!(await guest.locator('#start-prompt').isVisible()));
+  assert(!/fail|retry|another attempt/i.test(await guest.locator('#next-instruction').textContent()));
+  assert(!/To retry/.test(await guest.locator('body').innerText()));
+  await guest.screenshot({ path: `${output}/normal-exchange.png`, fullPage: true });
+  // Recorded native unanswered-request ending, sent through the mock adapter,
+  // real browser bridge, room socket, duplex observer and shared presentation.
+  await guest.evaluate(() => window.enqueueUart([...new TextEncoder().encode('PKT 2\r\nPKT 2\r\nPKT 2\r\nCAN\r\n')]));
+  await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'The exchange stopped');
+  await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'The exchange stopped');
+  assert(!(await guest.locator('#start-prompt').isEnabled()));
+  await host.screenshot({ path: `${output}/abort-receiver.png`, fullPage: true });
   await host.locator('#start-prompt').click();
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Press B now');
+  checks.push('Framed CAN returns both pages to preparation; normal exchange hides retry advice/buttons; receiver must freshly confirm');
   checks.push('Ready request and receiver confirmation update both pages; readiness expires; real toy bytes end the prompt without claiming success; controls never generate UART');
 
   await host.screenshot({ path: `${output}/desktop-paired.png`, fullPage: true });

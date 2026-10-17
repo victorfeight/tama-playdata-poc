@@ -1,0 +1,93 @@
+{
+  "rows": [
+    {
+      "case": "Tropical–Glacier native success",
+      "fragmentBytes": "original",
+      "changes": [
+        {
+          "atMs": 64195,
+          "state": "result-observed"
+        }
+      ],
+      "finalState": "result-observed",
+      "traceSha256": "17cfe18a446de1b691523f3bac0bb363c2b48f93026b8056df5f9dc023120623",
+      "wireSha256": [
+        "12d25dee471ddceba192952b74609f626e5be8c5817e01ffaa254761a476e533",
+        "739fd0c7380efd40b880f17a89d29f3c94ee72de0597eec3d68bc6d285c0e461"
+      ],
+      "limit": "Prior native history/save inspectors qualify persistence; observer does not."
+    },
+    {
+      "case": "Tropical–Glacier native success",
+      "fragmentBytes": 7,
+      "changes": [
+        {
+          "atMs": 64195,
+          "state": "result-observed"
+        }
+      ],
+      "finalState": "result-observed",
+      "traceSha256": "17cfe18a446de1b691523f3bac0bb363c2b48f93026b8056df5f9dc023120623",
+      "wireSha256": [
+        "12d25dee471ddceba192952b74609f626e5be8c5817e01ffaa254761a476e533",
+        "739fd0c7380efd40b880f17a89d29f3c94ee72de0597eec3d68bc6d285c0e461"
+      ],
+      "limit": "Prior native history/save inspectors qualify persistence; observer does not."
+    },
+    {
+      "case": "unanswered-request",
+      "changes": [
+        {
+          "atMs": 6560,
+          "state": "interrupted"
+        }
+      ],
+      "finalState": "interrupted",
+      "wireSha256": "ba05efd9abe39bf952db1e1d54a7b17a9b5c5d20fb19d4ee226675d30dc20742",
+      "finalNativeState": {
+        "atMs": 15740,
+        "transport": {
+          "object": "0x180091fc",
+          "flags": 0,
+          "receiveRequested": false,
+          "transferActive": false,
+          "automaticAccept": false,
+          "requestedBytes": 2,
+          "scope": "Stock Tropical request/accept flags; not native scene completion"
+        },
+        "controller": "0x18006018",
+        "mode": 32736,
+        "substate": 0
+      },
+      "limit": "Does not distinguish manual cancel from transport failure."
+    },
+    {
+      "case": "pre-transfer-cancel",
+      "changes": [],
+      "finalState": "exchanging",
+      "wireSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "finalNativeState": {
+        "atMs": 8800,
+        "transport": null,
+        "controller": "0x18006018",
+        "mode": 1000,
+        "substate": 1
+      },
+      "limit": "Cancellation emits no wire signal; cannot auto-detect."
+    },
+    {
+      "case": "lost-chunk-ack",
+      "changes": [],
+      "finalState": "exchanging",
+      "wireSha256": "603cef127fa629d81645026b058876f142d9f5f7378696ea8909d0544c0319d1",
+      "finalNativeState": {
+        "atMs": 13660,
+        "transport": null,
+        "controller": "0x18006018",
+        "mode": 1000,
+        "substate": 1
+      },
+      "limit": "Native timeout without CAN; UART-only observer correctly leaves outcome unknown."
+    }
+  ]
+}

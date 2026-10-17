@@ -27,3 +27,5 @@ export * from "./media-sender";
 export * from "./tet3-session";
 export * from "./hosted-match";
 export * from "./game-room";
+
+export * from "./playdate-outcome";

@@ -1,3 +1,5 @@
+import type { PlaydateOutcome } from "./playdate-outcome";
+
 /** Lobby metadata is JSON control traffic; it must never reach a toy's UART. */
 export interface LobbyMember {
   id: string;
@@ -24,6 +26,8 @@ export interface LobbySnapshot {
   /** Player-reported menu readiness, never detected device readiness. */
   startPrompt?: "prepare" | "ready" | "started" | undefined;
   readyForMs?: number | undefined;
+  /** Passive wire evidence only. Never proof of persistence on either toy. */
+  outcome?: PlaydateOutcome | undefined;
 }
 
 export interface LobbyListing {

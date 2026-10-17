@@ -27,12 +27,15 @@ export const MSG_FLAG_SET_SESSION_ID = 0x10;
 export interface TcpObserverEvents {
   packet?(packet: ObservedPacket): void;
   command?(line: string): void;
+  /** Exact command at a known boundary; never emitted from resync garbage. */
+  framedCommand?(line: string): void;
   error?(message: string): void;
   resync?(reason: string, totalResyncs: number): void;
 }
 
 type Phase =
   | { kind: "idle" }
+  | { kind: "request"; totalLength: number }
   | {
       kind: "receiving";
       totalLength: number;
@@ -50,14 +53,27 @@ export class TcpObserver {
   private phase: Phase = { kind: "idle" };
   private draining = false;
   private resyncCount = 0;
+  private aligned = true;
+  private epoch = 0;
+  private completion: Promise<void> = Promise.resolve();
 
-  constructor(private readonly events: TcpObserverEvents = {}) {}
+  constructor(private readonly events: TcpObserverEvents = {}, private readonly waitForInitialAck = false) {}
+
+  /** Used by a duplex observer, in wire order. No bytes are transmitted. */
+  peerCommand(line: string): void {
+    if (/^ACK(?: 1)?$/.test(line) && this.phase.kind === "request")
+      this.startPacket(this.phase.totalLength);
+  }
+
+  settled(): Promise<void> { return this.completion; }
 
   get resyncs(): number {
     return this.resyncCount;
   }
 
   reset(): void {
+    this.epoch++;
+    this.aligned = true;
     this.buffer = new Uint8Array();
     this.phase = { kind: "idle" };
   }
@@ -65,7 +81,7 @@ export class TcpObserver {
   push(data: Uint8Array): void {
     if (data.length === 0) return;
     this.buffer = concat(this.buffer, data);
-    void this.drain();
+    if (!this.draining) this.completion = this.drain();
   }
 
   private async drain(): Promise<void> {
@@ -80,7 +96,7 @@ export class TcpObserver {
         // view. Snapshot before each step so we can retry when the buffer
         // outgrew the reason consumeChunk bailed.
         const before = this.buffer.length;
-        if (this.phase.kind === "idle") {
+        if (this.phase.kind !== "receiving") {
           if (!this.consumeCommandLine()) {
             if (this.buffer.length > before) continue;
             return;
@@ -106,15 +122,22 @@ export class TcpObserver {
       // everything before the last potential ASCII region. Keep ≤64 bytes max to
       // avoid unbounded growth when we are genuinely mid-binary without a PKT.
       if (this.buffer.length > 4096) {
+        this.aligned = false;
         this.buffer = this.buffer.slice(this.buffer.length - 64);
       }
       return false;
     }
 
-    const line = decoder.decode(this.buffer.slice(0, crlf)).trim();
+    const rawLine = this.buffer.slice(0, crlf);
+    const line = decoder.decode(rawLine);
     this.buffer = this.buffer.slice(crlf + 2);
     if (line.length === 0) return true;
     this.events.command?.(line);
+    const exact = rawLine.every(b => b >= 32 && b <= 126) &&
+      /^(?:PKT [1-9][0-9]*|ACK(?: 1)?|NAK|CAN|ENQ [0-9]+|ECHO (?:REQ|REP)|BREED [01]|SYNC [12])$/.test(line);
+    if (!exact) this.aligned = false;
+    if (exact && this.aligned) this.events.framedCommand?.(line);
+    if (line === "CAN") this.phase = { kind: "idle" };
 
     const match = /^PKT\s+(\d+)$/i.exec(line);
     if (!match) {
@@ -122,7 +145,15 @@ export class TcpObserver {
       return true;
     }
     const totalLength = Number(match[1]);
-    if (!Number.isFinite(totalLength) || totalLength <= 0) return true;
+    if (!Number.isSafeInteger(totalLength) || totalLength <= 0 || totalLength > 0x40000) {
+      this.aligned = false; return true;
+    }
+    if (this.waitForInitialAck) this.phase = { kind: "request", totalLength };
+    else this.startPacket(totalLength);
+    return true;
+  }
+
+  private startPacket(totalLength: number): void {
     const totalChunks = Math.ceil(totalLength / CHUNK_MAX_LENGTH);
     this.phase = {
       kind: "receiving",
@@ -133,7 +164,6 @@ export class TcpObserver {
       lastMsgType: 0,
       lastSessionId: 0
     };
-    return true;
   }
 
   private async consumeChunk(): Promise<boolean> {
@@ -142,6 +172,8 @@ export class TcpObserver {
     const wireLen = NONCE_LENGTH + CHUNK_HEADER_LENGTH + chunkLen;
     if (this.buffer.length < wireLen) return false;
 
+    const epoch = this.epoch;
+    const phase = this.phase;
     const wire = this.buffer.slice(0, wireLen);
     const nonce = wire.slice(0, NONCE_LENGTH);
     const encrypted = wire.slice(NONCE_LENGTH);
@@ -149,6 +181,7 @@ export class TcpObserver {
     let chunk;
     try {
       const decrypted = await tcpCrypt(nonce, encrypted);
+      if (epoch !== this.epoch || phase !== this.phase) return true;
       chunk = parseChunk(decrypted);
     } catch (error) {
       // Chunk didn't parse. Possible causes:
@@ -157,6 +190,8 @@ export class TcpObserver {
       //   - wire corruption (CRC mismatch)
       // Advance by 1 byte and try to re-sync at next CRLF. This is cheap;
       // passive observation can afford to resync.
+      if (epoch !== this.epoch || phase !== this.phase) return true;
+      this.aligned = false;
       const reason = error instanceof Error ? error.message : String(error);
       this.resyncCount += 1;
       this.events.error?.(`chunk parse failed: ${reason}`);
@@ -173,6 +208,7 @@ export class TcpObserver {
       return true;
     }
 
+    this.aligned = true;
     this.phase.chunks.push(chunk.payload.slice(0, chunkLen));
     this.phase.lastMsgType = chunk.msgType;
     this.phase.lastSessionId = chunk.sessionId;

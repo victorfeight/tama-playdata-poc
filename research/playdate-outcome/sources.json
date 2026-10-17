@@ -1,0 +1,11 @@
+{
+  "/mnt/c/users/vic/paradise-scene-sdk/src/AnimationLab/native_contract.py": "5365070f120851d020a5e96c6c32409d506bbfa329a860abe5d74772244d305b",
+  "/mnt/c/users/vic/paradise-scene-sdk/src/AnimationLab/native_replay.py": "8d679fb9b7d10e5bd0dab2d8a9000269f71986ec76651644a73dd002db5227df",
+  "/mnt/c/users/vic/paradise-scene-sdk/src/AnimationLab/ghost_research/playdate_native.py": "a01b61b1da504b1a4d96b2a47c31ae8da3571cb5a963a5671a848f2d5a62f86d",
+  "/mnt/c/users/vic/paradise-scene-sdk/src/AnimationLab/ghost_research/uart_peer.py": "9a0ef685e38477f87d8c8b5ef951f9cfb1a0a9097047a0089864d95ed69809f6",
+  "/mnt/c/users/vic/paradise-scene-sdk/src/AnimationLab/ghost_research/home_uart_peer.py": "3d0d108975e53e16293308ae70b5ce98f0f3c02ad859605f899f87df77410fbd",
+  "/mnt/c/users/vic/paradise-scene-sdk/src/AnimationLab/evidence/playdate-uart/ghidra-transport/transport_command_dispatch.c": "afeb3d1aafe2ef4ac260e5df9b6cddeeae6226156640db16a37f9a12c83d880b",
+  "/mnt/c/users/vic/paradise-scene-sdk/src/AnimationLab/evidence/playdate-uart/ghidra-lifecycle/farewell_controller.c": "84f1012c57b5e7cd56cebfb0436fba608ba7f54e9ccbc4c1985af8012a28354d",
+  "sdkCommit": "4264ef2",
+  "onlineBaseCommit": "569b710"
+}
