@@ -5,6 +5,9 @@ const browser = await chromium.launch({ headless: true });
 try {
   for (const game of [false, true]) {
     const page = await browser.newPage(); let posts = 0;
+    if (game) await page.addInitScript(() => Object.defineProperty(navigator, 'serial', { value: {
+      requestPort: async () => ({ open: async () => {}, close: async () => {}, getInfo: () => ({ usbVendorId: 0x1a86, usbProductId: 0x7523 }) })
+    } }));
     await page.route('**/*', async route => {
       const request = route.request(), path = new URL(request.url()).pathname;
       if (path.startsWith('/sessions/') || path.startsWith('/game-rooms')) {
@@ -18,6 +21,13 @@ try {
     const input = page.locator(game ? '#group-nickname' : '#nickname');
     const create = page.locator(game ? '#group-create' : '#create-room');
     await create.waitFor({ state: 'visible' });
+    if (game) {
+      assert(await page.locator('#install-actions').isHidden());
+      await page.locator('#connect').click();
+      await page.locator('#install-actions:not([hidden])').waitFor();
+      await page.locator('#connect').click();
+      await page.waitForFunction(() => document.querySelector('#install-actions').hidden);
+    }
     await input.fill('fuck123'); await create.click();
     await page.waitForFunction(id => document.querySelector(id).getAttribute('aria-invalid') === 'true', game ? '#group-nickname' : '#nickname');
     assert.equal(posts, 0);

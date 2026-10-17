@@ -24,7 +24,8 @@ function controls() {
   element("device-state").textContent = serial ? "Connected" : "Not connected";
   sendButton.disabled = !serial || busy || !!room?.active || !gameAsset;
   musicButton.disabled = !serial || busy || !!room?.active || !musicAssets;
-  for (const id of ["install-actions", "install-instruction", "game-download-status", "existing-game-hint"])
+  element("install-actions").hidden = !serial || !!room?.active;
+  for (const id of ["install-instruction", "game-download-status", "existing-game-hint"])
     element(id).hidden = !!room?.active;
   room?.update();
 }

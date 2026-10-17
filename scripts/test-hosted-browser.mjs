@@ -48,8 +48,10 @@ try {
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(`${url}?game=${game}&mode=${mode}`);
     await page.locator('#group-room:not([hidden])').waitFor();
+    assert(await page.locator('#install-actions').isHidden(), 'Setup waits for an adapter');
     await page.locator('#group-nickname').fill(index ? 'Willow' : 'Fern');
     await page.locator('#connect').click();
+    await page.locator('#install-actions:not([hidden])').waitFor();
   }
   const [host, guest] = pages;
   await host.locator('#group-public').check(); await host.locator('#group-create').click();
