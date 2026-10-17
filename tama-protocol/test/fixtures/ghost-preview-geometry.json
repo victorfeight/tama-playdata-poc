@@ -1,0 +1,215 @@
+{
+  "scope": "Geometry only from SDK retained native UART packets and pinned stock/custom corpus. Signed image origins are independently native-qualified in Scene SDK scene_catalog/provenance/sprite-offsets/SPRITE_HEADER_OFFSETS.md. No artwork or personal names copied.",
+  "cases": [
+    {
+      "label": "Land",
+      "source": "private/artifacts/playdate-families/land-gameplay-normal/exchange/incoming-ghost.bin",
+      "packetSha256": "3f1982ae826e2b3a55e493093fb392e18b876c77512dfd7034e8b374a87b089f",
+      "flags": 0,
+      "poseHex": "00000000e0ff0010000040000000000000000000000001000000e8ff0010000040000000000000000000010002000000f0ff00100000400000000000000000000f0000000000000000000000000000000000000000000000ce000000e0ff00100000330000000000000000001100",
+      "parts": {
+        "body": {
+          "width": 64,
+          "height": 64,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "eyes": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "mouth": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      }
+    },
+    {
+      "label": "Water",
+      "source": "private/artifacts/playdate-families/water-gameplay-normal/exchange/incoming-ghost.bin",
+      "packetSha256": "3f1982ae826e2b3a55e493093fb392e18b876c77512dfd7034e8b374a87b089f",
+      "flags": 0,
+      "poseHex": "00000000e0ff0010000040000000000000000000000001000000e8ff0010000040000000000000000000010002000000f0ff00100000400000000000000000000f0000000000000000000000000000000000000000000000ce000000e0ff00100000330000000000000000001100",
+      "parts": {
+        "body": {
+          "width": 64,
+          "height": 64,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "eyes": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "mouth": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      }
+    },
+    {
+      "label": "Sky",
+      "source": "private/artifacts/playdate-families/sky-gameplay-normal/exchange/incoming-ghost.bin",
+      "packetSha256": "3f1982ae826e2b3a55e493093fb392e18b876c77512dfd7034e8b374a87b089f",
+      "flags": 0,
+      "poseHex": "00000000e0ff0010000040000000000000000000000001000000e8ff0010000040000000000000000000010002000000f0ff00100000400000000000000000000f0000000000000000000000000000000000000000000000ce000000e0ff00100000330000000000000000001100",
+      "parts": {
+        "body": {
+          "width": 64,
+          "height": 64,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "eyes": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "mouth": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      }
+    },
+    {
+      "label": "Jade",
+      "source": "private/artifacts/playdate-families/jade-normal/exchange/incoming-ghost.bin",
+      "packetSha256": "dbb89bdfd7347312375bb20750cf605c473a69ca9bc57c3c0a26c74a5c987078",
+      "flags": 4,
+      "poseHex": "00000000e0ff0010000040000000000000000000000001000000e3ff0010000040000000000000000000010002000000e6ff00100000400000000000000000000f0000000000000000000000000000000000000000000000d4000000e0ff00100000330000000000000000001100",
+      "parts": {
+        "body": {
+          "width": 64,
+          "height": 64,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "eyes": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "mouth": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      }
+    },
+    {
+      "label": "Tropical",
+      "source": "private/artifacts/playdate-families/tropical-gameplay-normal/exchange/incoming-ghost.bin",
+      "packetSha256": "1cc176643dbf41692f300f37d351534cd30ade04a9fbb9429b2217c66b657464",
+      "flags": 4,
+      "poseHex": "00000000e0ff0010000040000000000000000000000001000000e8ff0010000040000000000000000000010002000000f0ff00100000400000000000000000000f0000000000000000000000000000000000000000000000dd000000e0ff00100000330000000000000000001100",
+      "parts": {
+        "body": {
+          "width": 64,
+          "height": 64,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "eyes": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "mouth": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      }
+    },
+    {
+      "label": "Glacier",
+      "source": "private/artifacts/playdate-uart/repeat-identity/exchange-screenshot/incoming-ghost.bin",
+      "packetSha256": "c730120224bfeec30bf98f303e9298cc5c07253e53b3fded95078ca6179f02f9",
+      "flags": 4,
+      "poseHex": "00000000e0ff0010000040000000000000000000000001000000ebff0010000040000000000000000000010002000000ecff00100000400000000000000000000f0000000000000000000000000000000000000000000000dd000000e0ff00100000330000000000000000001100",
+      "parts": {
+        "body": {
+          "width": 64,
+          "height": 64,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "eyes": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "mouth": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      }
+    },
+    {
+      "label": "papillotchi",
+      "source": "private/fixtures/scene-actors/packets/7ac82bc83a248af4f71bf84f5b9da7b31fbc6a65ebfb1d01452f2fb8b25c698f.bin",
+      "packetSha256": "7ac82bc83a248af4f71bf84f5b9da7b31fbc6a65ebfb1d01452f2fb8b25c698f",
+      "flags": 0,
+      "poseHex": "00000000e0ff0010000040000000000000000000000001000000e6ff0010000040000000000000000000010002000000e7ff00100000400000000000000000000f0000000000000000000000000000000000000000000000ce000000e0ff00100000330000000000000000001100",
+      "parts": {
+        "body": {
+          "width": 64,
+          "height": 64,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "eyes": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": -2
+        },
+        "mouth": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      }
+    },
+    {
+      "label": "Metafoamtchi",
+      "source": "private/fixtures/metafoamtchi-handoff-20261016/fixtures/compact/ghost_metafoamtchi_9251_SPARSE_LIVE_NO_MOUTH_TEST.bin",
+      "packetSha256": "4bfa81f98510fbaea9678adb4216aba6d175fb6d3416d8562d841e5088eb196c",
+      "flags": 4,
+      "poseHex": "00000000c0ff0010000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "parts": {
+        "body": {
+          "width": 128,
+          "height": 128,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "eyes": {
+          "width": 64,
+          "height": 32,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      }
+    }
+  ]
+}

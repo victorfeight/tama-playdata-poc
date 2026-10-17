@@ -3,6 +3,8 @@
 // decrypts/decompresses as needed, parses palettes (RGB565 -> RGBA), and renders each
 // sprite to a plain RGBA Uint8ClampedArray. No DOM, no Canvas -- pure bytes in, pixels out.
 
+import { decodeHeatshrinkTile, hasHeatshrinkMarker } from "./heatshrink-tile";
+
 export enum CompressionType {
   None = 0,
   Bytewise = 1,
@@ -326,17 +328,27 @@ function getCompressedPixelData(data: Uint8Array, header: SpriteHeader): Uint8Ar
     const spriteLen = view.getInt32(offset + 4, true);
     offset += 8;
     if (spriteOffset < 0 || spriteOffset >= data.length) continue;
-    const sprite = new Uint8Array(Math.max(0, spriteLen));
+    if (spriteLen < 0 || spriteLen > data.length - spriteOffset)
+      throw new Error("Compressed sprite tile is outside its package");
+    const sprite = new Uint8Array(spriteLen);
     sprite.set(data.subarray(spriteOffset, Math.min(spriteOffset + spriteLen, data.length)), 0);
-    result.push(header.isEncrypted ? decrypt(sprite) : sprite);
+    // SHS2 bypasses XOR and native RLE. Do not identify it after decryption:
+    // a valid native plaintext RLE stream can coincidentally start with MAGIC.
+    if (header.compression === CompressionType.Bytewise && hasHeatshrinkMarker(sprite)) {
+      const capacity = Math.ceil(header.spriteWidthPx * header.spriteHeightPx * header.bpp / 8);
+      result.push(decodeHeatshrinkTile(sprite, capacity));
+    } else {
+      const native = header.isEncrypted ? decrypt(sprite) : sprite;
+      result.push(header.compression === CompressionType.Bytewise
+        ? decompressBytewise(native) : decompressWordwise(native));
+    }
   }
   return result;
 }
 
 function renderSprite(pixelData: Uint8Array, header: SpriteHeader, palette: Uint32Array): Uint32Array {
-  let data = pixelData;
-  if (header.compression === CompressionType.Bytewise) data = decompressBytewise(data);
-  else if (header.compression === CompressionType.Wordwise) data = decompressWordwise(data);
+  // Tile collection decodes once, shared by all palettes and preview frames.
+  const data = pixelData;
 
   const width = header.spriteWidthPx;
   const height = header.spriteHeightPx;
