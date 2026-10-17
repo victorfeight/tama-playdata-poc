@@ -109,7 +109,7 @@ The endpoint is now exported and the existing service has opt-in
 `HOSTED_GAMES=1` routes `/game-rooms` and `/game-ws/:code`. Published preview:
 `599b807`. `hosted-match.ts` owns pure round/target/result policy;
 `game-rooms.ts` owns credentials and connection lifetimes;
-`games/hosted-room.ts` reuses `SerialBridge` and the separate Games page.
+`games/game-room.ts` reuses `SerialBridge` and the separate Games page.
 No changes to stock Playdate UART forwarding are required.
 
 Both Blocks Online (mode 4) and the new Pocket Puzzle Online (`0x50500202`) use
@@ -151,3 +151,6 @@ No browser audio. These are not part of the recovered TET3 device protocol.
 The SDK `docs/ONLINE_UART_ROADMAP.md` records ownership/removal safeguards,
 telemetry bandwidth/queue boundaries and device-reported score limitations.
 Finish match lifecycle/reconnection qualification before adding visual traffic.
+
+Named direct Versus and hosted Online now share this room UI and membership
+service. See [mode clarification and validation](releases/2026-10-17-game-room-modes.md).

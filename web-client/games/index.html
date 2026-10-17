@@ -10,6 +10,7 @@
       <div class="row"><h2>Your connection</h2><span id="device-state" class="pill">Not connected</span></div>
       <p id="install-instruction">Connect your Paradise. To send a game, open <strong>Connection → Download → Download</strong> on the toy.</p>
       <button id="connect">Connect Paradise</button>
+      <p id="status" class="subtle" role="status" aria-live="polite">Connect your Paradise to get started.</p>
       <div id="install-actions" class="install-actions">
         <div id="music-setup" hidden>
           <h3>Music · optional, installed once</h3>
@@ -24,27 +25,23 @@
       </div>
       <div id="install-progress" hidden aria-live="polite"><p id="install-status" role="status"></p><progress id="transfer-progress" max="1" aria-label="Transfer progress"></progress></div>
       <p id="game-download-status" class="subtle" role="status">Checking game availability…</p>
-      <details id="download" hidden><summary>Keep a copy of the game</summary><a id="payload-link" download>Download game BIN</a></details>
       <p id="existing-game-hint" class="subtle">Game already on your toy? Leave it at its main menu and join a room below.</p>
     </section>
     <section class="card">
       <h2>Meet your friends</h2>
-      <label id="match-kind-field" hidden>Play with<select id="match-kind"><option value="direct">A friend · two players</option><option value="hosted">A group · 2–16 players</option></select></label>
-      <div id="direct-room">
-      <div class="room-actions"><button id="create" disabled>Create room</button><span>or</span><label>Room code<input id="code" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="ABC123"></label><button id="join" disabled>Join</button></div>
-      <div id="room" hidden><div class="row"><span>Your room</span><strong id="room-code"></strong><button id="copy">Copy code</button></div><button id="leave" class="secondary">Leave room</button></div>
-      <p id="status" role="status" aria-live="polite">Connect your Paradise to get started.</p>
-      <p id="play-instructions" hidden>On both toys, choose <strong>Versus</strong> now. If you already entered it, return to the game menu with <strong>C</strong>, then choose Versus again.</p>
-      </div>
-      <div id="group-room" hidden>
+      <label id="match-kind-field" hidden>Room type<select id="match-kind"><option value="direct">Versus · direct, 2 players</option><option value="hosted">Online · hosted, 2–16 players</option></select></label>
+      <p id="toy-mode-hint" class="subtle">Direct room · two players. Choose Versus on both toys after your friend joins.</p>
+      <div id="group-room">
         <div id="group-entry">
-          <label>Your nickname<input id="group-nickname" maxlength="40" autocomplete="nickname" placeholder="Your name"></label>
+          <label>Your nickname<input id="group-nickname" maxlength="20" autocomplete="nickname" placeholder="Your name"></label>
           <label class="check-label"><input type="checkbox" id="group-public"> Show in the room list</label>
           <div class="room-actions"><button id="group-create">Create room</button><label>Room code<input id="group-code-input" maxlength="6" autocomplete="off" placeholder="ABC123"></label><button id="group-join" class="secondary">Join</button></div>
           <div class="row room-list-heading"><h3>Open rooms</h3><button id="group-refresh" class="secondary">Refresh</button></div>
           <div id="group-list" class="group-list"></div>
         </div>
         <div id="group-current" hidden>
+          <h3 id="group-title"></h3>
+          <p id="group-visibility" class="subtle"></p>
           <div class="row"><strong id="group-code"></strong><button id="group-leave" class="secondary">Leave room</button></div>
           <button id="group-copy" class="secondary">Copy invite link</button>
           <ul id="group-players" class="group-players" aria-label="Players"></ul>

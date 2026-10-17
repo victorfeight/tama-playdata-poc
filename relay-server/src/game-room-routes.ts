@@ -1,23 +1,25 @@
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { GameRoomHub } from "./game-rooms";
+import type { GameRoomMode } from "@tama-breed-poc/tama-protocol";
 /** Opt-in during native/browser qualification. Same service, separate API. */
 export function registerGameRooms(app: FastifyInstance): void {
   const hub = new GameRoomHub();
   app.addHook("preClose", async () => hub.close());
   const nickname = { type: "string", minLength: 1, maxLength: 80 };
   const game = { type: "string", enum: ["blocks", "pocket-puzzle"] };
+  const mode = { type: "string", enum: ["direct", "hosted"] };
   const codeParams = { type: "object", required: ["code"], properties: { code: { type: "string", pattern: "^[A-Z0-9]{6}$" } } };
   const joinRate = { rateLimit: { max: 60, timeWindow: "1 minute" } };
-  app.get("/game-rooms", { config: { rateLimit: { max: 120, timeWindow: "1 minute" } } }, async () => ({ rooms: hub.list() }));
-  app.post<{ Body: { nickname: string; visibility: "public" | "private"; game: string } }>("/game-rooms", {
+  app.get("/game-rooms", { config: { rateLimit: { max: 120, timeWindow: "1 minute" } } }, async () => ({ rooms: hub.list(), modes: ["direct", "hosted"] }));
+  app.post<{ Body: { nickname: string; visibility: "public" | "private"; game: string; mode?: GameRoomMode } }>("/game-rooms", {
     bodyLimit: 1024, schema: { body: { type: "object", required: ["nickname", "visibility", "game"], additionalProperties: false,
-      properties: { nickname, game, visibility: { type: "string", enum: ["public", "private"] } } } }
-  }, async (request, reply) => reply.code(201).send(hub.create(request.body.nickname, request.body.visibility, request.body.game)));
-  app.post<{ Params: { code: string }; Body: { nickname: string; game: string } }>("/game-rooms/:code/join", {
+      properties: { nickname, game, mode, visibility: { type: "string", enum: ["public", "private"] } } } }
+  }, async (request, reply) => reply.code(201).send(hub.create(request.body.nickname, request.body.visibility, request.body.game, request.body.mode)));
+  app.post<{ Params: { code: string }; Body: { nickname: string; game: string; mode?: GameRoomMode } }>("/game-rooms/:code/join", {
     bodyLimit: 1024, config: joinRate, schema: { params: codeParams, body: { type: "object", required: ["nickname", "game"], additionalProperties: false,
-      properties: { nickname, game } } }
-  }, async request => hub.join(request.params.code, request.body.nickname, request.body.game));
+      properties: { nickname, game, mode } } }
+  }, async request => hub.join(request.params.code, request.body.nickname, request.body.game, request.body.mode));
   app.post<{ Params: { code: string }; Body: { token: string } }>("/game-rooms/:code/leave", {
     bodyLimit: 1024, config: joinRate, schema: { params: codeParams, body: { type: "object", required: ["token"], additionalProperties: false,
       properties: { token: { type: "string", pattern: "^[a-f0-9]{64}$" } } } }

@@ -44,11 +44,16 @@ try {
     });
     Object.defineProperty(navigator, 'serial', { value: serial });
   });
-  await context.route('**/sessions', r => r.fulfill({ json: { code: 'ABC123', token: 'browser-test' } }));
+  await context.route('**/game-rooms', r => r.fulfill({ json: r.request().method() === 'GET'
+    ? { rooms: [], modes: ['direct', 'hosted'] } : { code: 'ABC123', token: 'a'.repeat(64), memberId: 'self', game: 'pocket-puzzle', mode: 'direct' } }));
+  await context.route('**/game-rooms/*/leave', r => r.fulfill({ json: { ok: true } }));
   let socket;
-  await context.routeWebSocket('**/ws/**', ws => { socket = ws; setTimeout(() => ws.send('peer connected'), 30); });
+  await context.routeWebSocket('**/game-ws/**', ws => { socket = ws; setTimeout(() => ws.send(JSON.stringify({
+    type: 'game-room', code: 'ABC123', game: 'pocket-puzzle', mode: 'direct', owner: 'self', visibility: 'private', capacity: 2, canStart: false,
+    members: [{ id: 'self', nickname: 'Fern', connected: true, adapter: false, toyReady: false, ready: false }] })), 30); });
   page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
-  await page.goto(url); await page.locator('#download:not([hidden])').waitFor();
+  await page.goto(url); await page.waitForFunction(() => document.querySelector('#game-download-status').textContent === '');
+  assert.equal(await page.locator('#payload-link').count(), 0);
   assert(!(await page.locator('body').textContent()).includes('INSTALL-MUSIC.cmd'));
   assert(!(await page.locator('body').textContent()).includes('Python'));
   await page.locator('#connect').click();
@@ -65,7 +70,9 @@ try {
   await page.evaluate(() => window.returnToDownload()); await page.locator('#send-game').click();
   await page.waitForFunction(() => document.querySelector('#install-status').textContent.startsWith('Game received.'));
   assert.equal(await page.evaluate(() => window.portOpenCount), 1);
-  await page.locator('#create').click(); await page.locator('#room:not([hidden])').waitFor();
+  await page.locator('#group-nickname').fill('Fern');
+  await page.locator('#group-create').click(); await page.locator('#group-current:not([hidden])').waitFor();
+  await page.waitForFunction(() => document.querySelector('#group-players').textContent.includes('Fern'));
   socket.send(Buffer.from([4,5,6]));
   await page.waitForFunction(() => window.serialWrites.at(-1) === 3);
   checks.push('Game send and multiplayer bridge share the same open adapter');
@@ -74,8 +81,9 @@ try {
   await page.screenshot({ path: `${output}/game-ready-mobile.png`, fullPage: true });
   assert.deepEqual(errors, []);
   checks.push('390px layout without overflow or browser errors');
-  await page.locator('#leave').click();
-  await page.locator('#connect').click();
+  await page.locator('#group-leave').click();
+  await page.locator('#group-entry:not([hidden])').waitFor();
+  assert.equal(await page.locator('#device-state').textContent(), 'Connected');
   await page.evaluate(() => { window.returnToDownload(); window.unplugNextWrite = true; });
   const beforeUnplug = await page.evaluate(() => window.serialWrites.length);
   await page.locator('#send-game').click();
@@ -87,7 +95,7 @@ try {
   await page.evaluate(() => window.returnToDownload());
   await page.locator('#send-game').click();
   await page.waitForFunction(() => document.querySelector('#install-status').textContent.startsWith('Game received.'));
-  assert.equal(await page.evaluate(() => window.portOpenCount), 3);
+  assert.equal(await page.evaluate(() => window.portOpenCount), 2);
   assert.deepEqual(errors, []);
   checks.push('Unplug stops transfer immediately, clears connected state and allows a fresh connection/game send without automatic write retries');
   await writeFile(`${output}/browser.json`, JSON.stringify({ passed: true, checks, scope: 'Actual packaged assets and browser code; simulated UART responses and room' }, null, 2));

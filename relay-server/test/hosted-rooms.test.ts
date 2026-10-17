@@ -82,3 +82,44 @@ describe("hosted room membership and transport", () => {
     sc.emit("message", Buffer.alloc(8193), true); expect(sc.closeCode).toBe(1008);
   });
 });
+
+describe("named direct game rooms", () => {
+  it("lists names and mode, limits two seats, rejects wrong mode and gates exact peer bytes on both adapters", () => {
+    setup(); const a = hub.create("Fern", "public", "pocket-puzzle", "direct"), sa = new Socket();
+    hub.attach(a.code, a.token, sa.ws);
+    expect(hub.list()[0]).toMatchObject({ nickname: "Fern", mode: "direct", capacity: 2, count: 1 });
+    expect(() => hub.join(a.code, "Wrong", "pocket-puzzle")).toThrow("Versus");
+    const b = hub.join(a.code, "Willow", "pocket-puzzle", "direct"), sb = new Socket();
+    hub.attach(a.code, b.token, sb.ws);
+    expect(() => hub.join(a.code, "Third", "pocket-puzzle", "direct")).toThrow("2 players");
+    expect(hub.list()).toEqual([]);
+    sa.control({ type: "adapter", connected: true });
+    sa.emit("message", Buffer.from([1, 2]), true); expect(sb.messages.some(m => m.binary)).toBe(false);
+    sb.control({ type: "adapter", connected: true });
+    const bytes = Buffer.from([0, 255, 1, 2]); sa.emit("message", bytes, true);
+    expect(sb.messages.at(-1)).toEqual({ data: bytes, binary: true });
+    sb.emit("message", bytes.subarray(1), true);
+    expect(sa.messages.at(-1)).toEqual({ data: bytes.subarray(1), binary: true });
+    expect(sa.snapshot().canStart).toBe(false);
+    sa.control({ type: "start" }); expect(sa.messages.at(-1)!.data.toString()).toContain("Choose Versus");
+    expect(JSON.stringify(sa.snapshot())).not.toContain(b.token);
+  });
+  it("stops both adapters after peer loss/replacement, requires fresh opt-in and applies backpressure", () => {
+    setup(); const a = hub.create("A", "private", "blocks", "direct"), b = hub.join(a.code, "B", "blocks", "direct");
+    const sa = new Socket(), sb = new Socket(); hub.attach(a.code, a.token, sa.ws); hub.attach(a.code, b.token, sb.ws);
+    for (const s of [sa, sb]) s.control({ type: "adapter", connected: true });
+    sb.control({ type: "adapter", connected: false });
+    expect(sa.snapshot().members.every((m: any) => !m.adapter)).toBe(true);
+    expect(sa.snapshot().members[0].reason).toContain("friend disconnected");
+    const count = sb.messages.length;
+    sa.emit("message", Buffer.from([1]), true); expect(sb.messages.length).toBe(count);
+    for (const s of [sa, sb]) s.control({ type: "adapter", connected: true });
+    sb.bufferedAmount = 65537; sa.emit("message", Buffer.from([2]), true);
+    expect(sb.closeCode).toBe(1013); expect(sa.snapshot().members[0].adapter).toBe(false);
+    const replacement = new Socket(); hub.attach(a.code, b.token, replacement.ws);
+    expect(replacement.snapshot().members.every((m: any) => !m.adapter)).toBe(true);
+    sa.control({ type: "adapter", connected: true }); replacement.control({ type: "adapter", connected: true });
+    sa.emit("message", Buffer.from([3]), true);
+    expect(replacement.messages.at(-1)).toEqual({ data: Buffer.from([3]), binary: true });
+  });
+});

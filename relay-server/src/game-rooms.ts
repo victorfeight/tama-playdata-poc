@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { WebSocket, type RawData } from "ws";
-import { HostedMatch, BLOCKS_HOSTED, PUZZLE_HOSTED, Tet3Session, type HostedGameId, type GameRoomEntry, type GameRoomSnapshot, type GameRoomListing } from "@tama-breed-poc/tama-protocol";
+import { HostedMatch, BLOCKS_HOSTED, PUZZLE_HOSTED, Tet3Session, type HostedGameId, type GameRoomMode, type GameRoomEntry, type GameRoomSnapshot, type GameRoomListing } from "@tama-breed-poc/tama-protocol";
 import { LobbyError, cleanNickname } from "./lobby";
 interface Member {
   id: string; nickname: string; token: string; ws?: WebSocket | undefined;
@@ -10,36 +10,39 @@ interface Member {
 }
 interface Room {
   code: string; game: HostedGameId; visibility: "public" | "private"; owner: string;
+  mode: GameRoomMode;
   members: Member[]; match?: HostedMatch | undefined; roster: string[];
   expires: number; broadcastAt: number; lastSnapshot: string;
 }
-/** Hosted games terminate one TET3 connection per toy. Never a broadcast relay.
- * Separate routes/lifetime from the existing Playdate and direct Versus rooms. */
+/** Shared game membership; direct rooms forward unchanged bytes to one peer,
+ * hosted rooms terminate one TET3 connection per toy. Playdate stays separate. */
 export class GameRoomHub {
   private readonly rooms = new Map<string, Room>();
   private readonly timer: ReturnType<typeof setInterval>;
   constructor(private readonly now = () => performance.now()) {
     this.timer = setInterval(() => this.tick(), 20); this.timer.unref();
   }
-  create(nickname: string, visibility: "public" | "private", game: string): GameRoomEntry {
+  create(nickname: string, visibility: "public" | "private", game: string, mode: GameRoomMode = "hosted"): GameRoomEntry {
     this.sweep(); this.game(game);
+    if (mode !== "direct" && mode !== "hosted") throw new LobbyError(400, "Choose a supported room type.");
     const name = cleanNickname(nickname);
     if (this.rooms.size >= 32) throw new LobbyError(503, "Game rooms are busy. Please try again shortly.");
     let code: string; do { code = crypto.randomBytes(3).toString("hex").toUpperCase(); } while (this.rooms.has(code));
-    const room: Room = { code, game: game as HostedGameId, visibility, owner: "", members: [], roster: [],
+    const room: Room = { code, game: game as HostedGameId, mode, visibility, owner: "", members: [], roster: [],
       expires: this.now() + 2 * 60 * 60 * 1000, broadcastAt: 0, lastSnapshot: "" };
     this.rooms.set(code, room); return this.add(room, name);
   }
-  join(code: string, nickname: string, game: string): GameRoomEntry {
+  join(code: string, nickname: string, game: string, mode: GameRoomMode = "hosted"): GameRoomEntry {
     this.sweep(); const room = this.room(code); this.game(game);
     if (room.game !== game) throw new LobbyError(409, "This room is playing a different game.");
+    if (room.mode !== mode) throw new LobbyError(409, `This room uses ${room.mode === "direct" ? "Versus · direct, 2 players" : "Online · hosted, 2–16 players"}. Select that room type and join again.`);
     if (room.match) throw new LobbyError(409, "This match has started. Join after the owner opens the next match.");
-    if (room.members.length >= 16) throw new LobbyError(409, "This room has all 16 players.");
+    if (room.members.length >= this.capacity(room)) throw new LobbyError(409, `This room has all ${this.capacity(room)} players.`);
     return this.add(room, cleanNickname(nickname));
   }
   list(): GameRoomListing[] {
-    this.sweep(); return [...this.rooms.values()].filter(r => r.visibility === "public" && !r.match && r.members.length < 16 && r.members.some(m => m.ws))
-      .map(r => ({ code: r.code, game: r.game, nickname: r.members.find(m => m.id === r.owner)!.nickname, count: r.members.length, capacity: 16 }));
+    this.sweep(); return [...this.rooms.values()].filter(r => r.visibility === "public" && !r.match && r.members.length < this.capacity(r) && r.members.some(m => m.ws))
+      .map(r => ({ code: r.code, game: r.game, mode: r.mode, nickname: r.members.find(m => m.id === r.owner)!.nickname, count: r.members.length, capacity: this.capacity(r) }));
   }
   leave(code: string, token: string): void {
     const room = this.rooms.get(code), member = room?.members.find(m => m.token === token);
@@ -64,7 +67,14 @@ export class GameRoomHub {
       if (binary) {
         member.bytes += bytes.length;
         if (bytes.length > 8192 || member.bytes > 32768) { ws.close(1008, "Too much toy traffic"); return; }
-        member.net?.receive(bytes, now); return;
+        if (room.mode === "direct") {
+          const peer = room.members.find(m => m !== member);
+          if (member.adapter && peer?.adapter && peer.ws?.readyState === WebSocket.OPEN) {
+            if (peer.ws.bufferedAmount > 65536) peer.ws.close(1013, "Connection too slow; reconnect your toys");
+            else peer.ws.send(bytes, { binary: true });
+          }
+        } else member.net?.receive(bytes, now);
+        return;
       }
       if (bytes.length > 512 || ++member.controls > 20) { ws.close(1008, "Too many room controls"); return; }
       try { this.control(room, member, JSON.parse(bytes.toString())); }
@@ -90,6 +100,7 @@ export class GameRoomHub {
       else if (!member.adapter) {
         if (room.match) throw new LobbyError(409, "Wait for a new match, then return to Online on your toy.");
         member.adapter = true; member.reason = undefined; member.lobbyCount = 0;
+        if (room.mode === "direct") { this.broadcast(room); return; }
         const ws = member.ws!, nonce = crypto.randomBytes(4).readUInt32LE() || 1;
         member.net = new Tet3Session(this.policy(room).mode, nonce, this.now(), bytes => {
           if (member.ws !== ws || ws.readyState !== WebSocket.OPEN) return;
@@ -104,6 +115,8 @@ export class GameRoomHub {
           if (index >= 0) room.match?.disconnect(index, reason, this.now());
         });
       }
+    } else if (room.mode === "direct") {
+      throw new LobbyError(400, "Choose Versus on both toys. The toys start this direct match.");
     } else if (m.type === "ready" && typeof m.ready === "boolean") {
       if (room.match) throw new LobbyError(409, "The match has already started.");
       if (m.ready && (!member.net?.ready || member.net.error)) throw new LobbyError(409, "Choose Online on your toy and wait for its connection.");
@@ -125,6 +138,11 @@ export class GameRoomHub {
     this.broadcast(room);
   }
   private detach(room: Room, member: Member, reason: string): void {
+    if (room.mode === "direct" && member.adapter) {
+      // A replacement peer must never inherit a running toy's old session.
+      const peer = room.members.find(m => m !== member);
+      if (peer?.adapter) { peer.adapter = false; peer.ready = false; peer.reason = "Your friend disconnected. Both return to the game menu, then reconnect your toys here."; }
+    }
     member.adapter = member.ready = false; member.reason = reason;
     const net = member.net; member.net = undefined;
     const index = room.roster.indexOf(member.id);
@@ -132,8 +150,9 @@ export class GameRoomHub {
     net?.stop(reason);
   }
   private canStart(room: Room): boolean {
-    return !room.match && room.members.length >= 2 && room.members.every(m => m.ws?.readyState === WebSocket.OPEN && m.ready && m.net?.ready && !m.net.error);
+    return room.mode === "hosted" && !room.match && room.members.length >= 2 && room.members.every(m => m.ws?.readyState === WebSocket.OPEN && m.ready && m.net?.ready && !m.net.error);
   }
+  private capacity(room: Room) { return room.mode === "direct" ? 2 : 16; }
   private policy(room: Room) { return room.game === "blocks" ? BLOCKS_HOSTED : PUZZLE_HOSTED; }
   private game(game: string): void { if (game !== "blocks" && game !== "pocket-puzzle") throw new LobbyError(400, "This hosted game is not available yet."); }
   private room(code: string): Room { const r = this.rooms.get(code); if (!r) throw new LobbyError(404, "That game room has closed."); return r; }
@@ -141,7 +160,7 @@ export class GameRoomHub {
     const member: Member = { id: crypto.randomBytes(8).toString("hex"), token: crypto.randomBytes(32).toString("hex"), nickname,
       adapter: false, ready: false, expires: this.now() + 60000, pong: 0, ping: 0, window: 0, controls: 0, bytes: 0, lobbyCount: 0 };
     room.members.push(member); if (!room.owner) room.owner = member.id; this.broadcast(room);
-    return { code: room.code, memberId: member.id, token: member.token, game: room.game };
+    return { code: room.code, memberId: member.id, token: member.token, game: room.game, mode: room.mode };
   }
   private owner(room: Room): void {
     if (!room.members.length) { this.rooms.delete(room.code); return; }
@@ -177,7 +196,7 @@ export class GameRoomHub {
   private broadcast(room: Room): void {
     room.broadcastAt = this.now();
     const snapshot: GameRoomSnapshot = { type: "game-room", code: room.code, game: room.game, owner: room.owner,
-      visibility: room.visibility, capacity: 16, canStart: this.canStart(room), members: room.members.map(m => ({ id: m.id, nickname: m.nickname,
+      mode: room.mode, visibility: room.visibility, capacity: this.capacity(room), canStart: this.canStart(room), members: room.members.map(m => ({ id: m.id, nickname: m.nickname,
         connected: m.ws?.readyState === WebSocket.OPEN, adapter: m.adapter, toyReady: !!m.net?.ready && !m.net.error,
         ready: m.ready, reason: m.reason })), match: room.match?.snapshot(),
       countdownMs: room.match?.phase === "countdown" ? Math.max(0, room.match.snapshot().deadline - this.now()) : undefined };
