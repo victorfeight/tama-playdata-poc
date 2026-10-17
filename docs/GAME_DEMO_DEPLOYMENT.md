@@ -3,6 +3,62 @@
 Inspected by read-only SSH on 2026-10-16. No remote files, services or DNS were
 changed. Existing SSH credentials were used without printing key contents.
 
+## Combined Playdate + Games release (2026-10-17)
+
+The Games branch now integrates the serial lifecycle fixes and the received-ghost
+geometry/SHS2 preview decoder. Publish these together from main. Existing Gift
+service/source stays separate. These changes do not change stock firmware's B
+ordering, repair native SHS2 visitor portraits, or implement 2–16-player hosting.
+
+1. Run protocol/relay tests, protocol/web/server TypeScript builds and the Vite
+   production build with `VITE_RELAY_URL=https://playdate.bbamorachi.us`.
+   Legacy private ghost tests accept `TAMA_GHOST_FIXTURE=/path/to/ghost.bin`;
+   their old symlink is not portable. Do not silently skip them.
+2. Build Pocket Puzzle with the SDK `build_app.py`. Package the existing reviewed
+   music stream with `examples/music-installer/package.py --archive SETUP.zip`;
+   this emits a ZIP hash receipt. Music is optional and installed once; the game
+   is a separate ordinary Download payload. Never ask users for a full restore.
+3. Commit the source, then stage **both** pages, both verified games and optional
+   setup using the shared packager:
+
+   ```sh
+   node scripts/package-game-demo.mjs NEW_RELEASE --full-web \
+     BLOCKS/app-build.json PUZZLE/app-build.json --music-setup=SETUP.zip
+   python3 scripts/publish-web-release.py NEW_RELEASE
+   ```
+
+   Full releases require both game receipts. Setup hash and bundled game must
+   match the same Puzzle receipt. The manifest records source commit and every
+   public file hash. Never upload private firmware/config/test directories.
+4. Push main. Upload the package to a new `/srv/game-demo/releases/RELEASE/web`
+   directory; verify the manifest again on the server. Keep the old server HEAD
+   and static tree. Dependencies are unchanged in this release.
+5. Fetch the reviewed commit, stage its relay sources on a separate loopback port
+   and private database, and run `scripts/probe-game-relay.mjs` against it.
+   Stop that temporary process afterward. Check live port3001 has no connected
+   sessions before the short service restart; do not interrupt an active match.
+6. Fast-forward `/srv/playdate` to the reviewed commit, restart only
+   `playdate-relay.service`, and verify loopback health. Publish with:
+
+   ```sh
+   python3 /srv/playdate/scripts/publish-web-release.py RELEASE/web \
+     --live /srv/playdate/web-client/dist --backup RELEASE/previous-web
+   ```
+
+   The publisher verifies all hashes before writing, preserves an exclusive
+   backup and old assets, then replaces the HTML entry points last. A Git push
+   alone does not deploy. Retain the package when cleaning CI/build outputs.
+7. Check public Playdate/Games/Gift URLs, referenced assets, game/setup hashes,
+   two-way room bytes and reconnect behavior. Physical two-player/WAN testing
+   remains separate from emulator/browser/loopback checks.
+
+The setup UI is a collapsed optional music section, a normal game download,
+Connect Paradise, and create/join room. Disconnect TamaHome UART before the
+browser connects. Once both peers arrive, choose Versus on both toys.
+
+The original read-only audit and initial frontend-only plan follow for provenance;
+use the combined route above for new full deployments.
+
 ## Access and current services
 
 Local alias: `/home/vic/.ssh/config`, host `playdate`, user `vic`, port 222,

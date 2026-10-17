@@ -29,5 +29,23 @@ try {
     result = run(output, input); assert.notEqual(result.status, 0, name);
     await assert.rejects(access(output), `${name} must fail before creating a partial package`);
   }
+  const [otherReceipt, setupArchive] = process.argv.slice(3);
+  if (otherReceipt && setupArchive) {
+    const full = path.join(directory, "full");
+    result = spawnSync(process.execPath, [packager, full, receiptPath, otherReceipt, "--full-web", `--music-setup=${setupArchive}`], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    const manifest = JSON.parse(await readFile(path.join(full, "manifest.json"), "utf8"));
+    assert(manifest.fullWeb && manifest.files["index.html"] && manifest.files["games/index.html"]);
+    const puzzle = JSON.parse(await readFile(path.join(full, "games/payload-pocket-puzzle.json"), "utf8"));
+    assert(manifest.files[`games/${puzzle.setup.file}`] === puzzle.setup.sha256);
+    const badSetup = path.join(directory, "bad.zip");
+    await writeFile(badSetup, await readFile(setupArchive));
+    const setupReceipt = JSON.parse(await readFile(setupArchive.slice(0, -4) + ".json", "utf8"));
+    await writeFile(badSetup.slice(0, -4) + ".json", JSON.stringify({ ...setupReceipt, game_sha256: "0".repeat(64) }));
+    const badOutput = path.join(directory, "bad-setup");
+    result = spawnSync(process.execPath, [packager, badOutput, receiptPath, otherReceipt, "--full-web", `--music-setup=${badSetup}`], { encoding: "utf8" });
+    assert.notEqual(result.status, 0, "Setup must contain the exact published game");
+    await assert.rejects(access(badOutput));
+  }
   console.log("PASS verified source payload, exclusive output, stale BIN, stale receipt and wrong-route rejection");
 } finally { await rm(directory, { recursive: true, force: true }); }

@@ -129,6 +129,8 @@ async function selectGame() {
   element("game-name").textContent = selectedGame.title;
   element("game-controls").textContent = selectedGame.controls;
   element("download").hidden = true;
+  element("music-setup").hidden = gameSelect.value !== "pocket-puzzle";
+  element("setup-download").hidden = true;
   const chosen = selectedGame;
   const manifest = gameSelect.value === "blocks" ? "payload.json" : "payload-pocket-puzzle.json";
   try {
@@ -150,6 +152,15 @@ async function selectGame() {
     const link = element<HTMLAnchorElement>("payload-link");
     link.href = `./${file}`; link.textContent = `Download ${chosen.title}`;
     link.title = `SHA-256: ${sha256}`; element("download").hidden = false;
+    if ("setup" in data && data.setup && typeof data.setup === "object" && "file" in data.setup && "sha256" in data.setup) {
+      const setup = data.setup;
+      if (typeof setup.file === "string" && /^pocket-puzzle-setup\.[a-f0-9]{12}\.zip$/.test(setup.file) &&
+          typeof setup.sha256 === "string" && /^[a-f0-9]{64}$/.test(setup.sha256)) {
+        const setupLink = element<HTMLAnchorElement>("setup-link");
+        setupLink.href = `./${setup.file}`; setupLink.title = `SHA-256: ${setup.sha256}`;
+        element("setup-download").hidden = false;
+      }
+    }
   } catch { /* Manual send remains available when no staged payload exists. */ }
 }
 gameSelect.addEventListener("change", () => {

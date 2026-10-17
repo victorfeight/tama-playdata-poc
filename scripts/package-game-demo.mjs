@@ -6,7 +6,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const output = process.argv[2];
-const payloadReceipts = process.argv.slice(3);
+const fullWeb = process.argv.slice(3).includes("--full-web");
+const setupArg = process.argv.slice(3).find(arg => arg.startsWith("--music-setup="));
+const payloadReceipts = process.argv.slice(3).filter(arg => arg !== "--full-web" && arg !== setupArg);
 if (!output) throw new Error("Usage: node scripts/package-game-demo.mjs /new/staging-directory [source-app-build.json ...]");
 const destination = path.resolve(output), dist = path.join(root, "web-client/dist");
 const html = await readFile(path.join(dist, "games/index.html"), "utf8");
@@ -36,12 +38,27 @@ for (const payloadReceipt of payloadReceipts) {
     application: receipt.application, hardwareQualified: receipt.hardware_qualified === true,
     sourceBuildReceiptSha256: receipt.build_receipt_sha256 } });
 }
+if (fullWeb && payloads.length !== 2) throw new Error("A full web release needs verified Blocks and Pocket Puzzle receipts");
+let setup;
+if (setupArg) {
+  const archive = setupArg.slice("--music-setup=".length);
+  if (!archive.endsWith(".zip")) throw new Error("Expected music setup ZIP");
+  const receipt = JSON.parse(await readFile(archive.slice(0, -4) + ".json", "utf8"));
+  const bytes = await readFile(archive), sha256 = createHash("sha256").update(bytes).digest("hex");
+  const puzzle = payloads.find(p => p.manifest.application === "pocket-puzzle");
+  if (!puzzle || receipt.operation !== "install-only" || receipt.sha256 !== sha256 || receipt.game_sha256 !== puzzle.manifest.sha256)
+    throw new Error("Music setup receipt or bundled game differs from release");
+  setup = { bytes, file: `pocket-puzzle-setup.${sha256.slice(0, 12)}.zip`, sha256 };
+  puzzle.manifest.setup = { file: setup.file, sha256 };
+}
 await mkdir(destination); // Exclusive destination: do not overwrite another release.
-for (const name of ["games", "assets"]) await cp(path.join(dist, name), path.join(destination, name), { recursive: true });
+for (const name of fullWeb ? ["games", "assets", "sprites", "index.html"] : ["games", "assets"])
+  await cp(path.join(dist, name), path.join(destination, name), { recursive: true });
 for (const payload of payloads) {
   await writeFile(path.join(destination, "games", payload.manifest.file), payload.bytes);
   await writeFile(path.join(destination, "games", payload.manifestName), JSON.stringify(payload.manifest, null, 2) + "\n");
 }
+if (setup) await writeFile(path.join(destination, "games", setup.file), setup.bytes);
 const files = {};
 async function scan(dir) {
   for (const entry of await readdir(path.join(destination, dir), { withFileTypes: true })) {
@@ -50,6 +67,6 @@ async function scan(dir) {
     else files[name] = createHash("sha256").update(await readFile(path.join(destination, name))).digest("hex");
   }
 }
-await scan("games"); await scan("assets");
-await writeFile(path.join(destination, "manifest.json"), JSON.stringify({ sourceCommit, dirty, files }, null, 2) + "\n");
+await scan("");
+await writeFile(path.join(destination, "manifest.json"), JSON.stringify({ sourceCommit, dirty, fullWeb, files }, null, 2) + "\n");
 console.log(`Staged ${Object.keys(files).length} files at ${destination}; source ${sourceCommit}${dirty ? " (uncommitted changes)" : ""}. Not deployed.`);

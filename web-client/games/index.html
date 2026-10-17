@@ -8,7 +8,8 @@
     <section class="card">
       <label>Choose your game<select id="game"><option value="blocks">TamaHome Blocks</option><option value="pocket-puzzle">Pocket Puzzle</option></select></label>
       <div class="row"><h2>Your connection</h2><span id="device-state" class="pill">Not connected</span></div>
-      <p>Send <strong id="game-name">TamaHome Blocks</strong> from Launchpad first. Disconnect in TamaHome, then leave the game on its main menu.</p>
+      <details id="music-setup" hidden><summary>Optional: add music once</summary><p>Already installed the Pocket Puzzle music? Skip this step. Otherwise, unzip the setup download, disconnect TamaHome and run INSTALL-MUSIC.cmd with your toy on Connection → Download → Download. Wait for “PASS: music verified”, then press C to return.</p><p id="setup-download" hidden><a id="setup-link" download>Download music setup</a> · Python 3 required. Mac/Linux: run <code>python3 install_music.py</code>.</p><p>The helper installs the music bank without a full firmware restore. You can play online without music.</p></details>
+      <p>Send <strong id="game-name">TamaHome Blocks</strong> through TamaHome’s Launchpad. Then disconnect UART in TamaHome, leave the game on its main menu, and connect here.</p>
       <p id="download" hidden><a id="payload-link" download>Download Blocks</a> <span class="subtle">· experimental preview</span></p>
       <button id="connect">Connect Paradise</button>
     </section>

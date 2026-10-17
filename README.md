@@ -4,14 +4,15 @@ Standalone proof-of-concept for relaying Tamagotchi Paradise playdate and breedi
 
 The separate game-room preview is documented in
 [Source Blocks preview](docs/SOURCE_BLOCKS_PREVIEW.md), including the SDK source,
-tests, verified payload packaging and proposed gateway/server placement.
+tests and verified payload packaging. The maintained game entry is `/games/`;
+use [the deployment guide](docs/GAME_DEMO_DEPLOYMENT.md) for a combined release.
 
 This project intentionally does not modify `TAMA_NEW`, `unexists-nextjs-frontend`, `strapi-backend-unexists`, `security-audit`, or `bbamorachi_site-main`.
 
 ## What Is Here
 
 - `tama-protocol/`: TypeScript ports of the Paradise CRC, chunk header, SHA-256 XOR cipher shape, play data structs, ghost metadata parser, checksum verifier, and transport interfaces.
-- `relay-server/`: Fastify + WebSocket + SQLite byte relay with 6-character room codes, shared-secret protection, 10 minute TTL, heartbeats, byte counters, and close cascade.
+- `relay-server/`: Fastify + WebSocket + SQLite byte relay with 6-character room codes, per-room tokens, 10 minute idle expiry, heartbeats, byte counters, and peer reconnects.
 - `web-client/`: Vite + vanilla TypeScript + Canvas 2D UI. No React, Pixi, Phaser, or Three.js.
 
 ## Critical Reference Finding

@@ -5,3 +5,4 @@ relay-server/data/*.db
 relay-server/data/*.db-*
 *.log
 .DS_Store
+__pycache__/
