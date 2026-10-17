@@ -60,7 +60,8 @@ export class RelayHub {
       if (ws.readyState === WebSocket.OPEN) ws.ping();
     }, this.heartbeatMs);
 
-    ws.on("message", (data) => {
+    ws.on("message", (data, isBinary) => {
+      if (!isBinary) return;
       if (this.pairs.get(code) !== pair || pair[role]?.ws !== ws) return;
       const other = role === "a" ? pair.b : pair.a;
       if (!other || other.ws.readyState !== WebSocket.OPEN) return;

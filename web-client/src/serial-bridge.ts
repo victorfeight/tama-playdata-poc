@@ -1,4 +1,5 @@
-import { Transport } from "@tama-breed-poc/tama-protocol";
+import { subscribeSerial } from "./serial-reader";
+import type { Transport } from "@tama-breed-poc/tama-protocol";
 import { SerialBatcher } from "./serial-batcher";
 
 export interface BridgeStats {
@@ -13,6 +14,7 @@ export interface SerialBridgeEvents {
 
 export class SerialBridge {
   private closed = false;
+  private unsubscribeSerial: (() => void) | undefined;
   private messageHandler: ((event: MessageEvent) => void) | undefined;
   private readonly serialBatcher: SerialBatcher;
   readonly stats: BridgeStats = { bytesIn: 0, bytesOut: 0 };
@@ -38,16 +40,26 @@ export class SerialBridge {
   }
 
   start(): void {
-    if (this.messageHandler) return;
+    if (this.closed || this.messageHandler) return;
+    this.unsubscribeSerial = subscribeSerial(this.serial, {
+      bytes: (data) => {
+        if (this.ws.readyState === WebSocket.OPEN) this.serialBatcher.push(data);
+      },
+      error: (error) => {
+        this.stop();
+        this.events.error?.(error);
+      }
+    });
     this.messageHandler = (event) => {
       void this.writePeerBytes(event);
     };
     this.ws.addEventListener("message", this.messageHandler);
-    void this.pumpSerialToSocket();
   }
 
   stop(): void {
     this.closed = true;
+    this.unsubscribeSerial?.();
+    this.unsubscribeSerial = undefined;
     this.serialBatcher.discard();
     if (this.messageHandler) {
       this.ws.removeEventListener("message", this.messageHandler);
@@ -66,26 +78,12 @@ export class SerialBridge {
     try {
       if (typeof event.data === "string") return;
       const data = event.data instanceof ArrayBuffer ? new Uint8Array(event.data) : new Uint8Array(await event.data.arrayBuffer());
+      if (this.closed) return;
       await this.serial.write(data);
       this.stats.bytesIn += data.length;
       this.events.bytes?.("in", data, this.stats);
     } catch (error) {
-      this.events.error?.(error);
-    }
-  }
-
-  private async pumpSerialToSocket(): Promise<void> {
-    while (!this.closed) {
-      try {
-        const data = await this.serial.read();
-        if (this.closed || !data.length) continue;
-        if (this.ws.readyState === WebSocket.OPEN) this.serialBatcher.push(data);
-      } catch (error) {
-        const wasClosed = this.closed;
-        this.closed = true;
-        if (!wasClosed) this.events.error?.(error);
-        return;
-      }
+      if (!this.closed) this.events.error?.(error);
     }
   }
 }

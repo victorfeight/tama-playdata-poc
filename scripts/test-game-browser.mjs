@@ -1,7 +1,7 @@
 // Real browser UI with explicit simulated UART/room endpoints. Native pair
 // testing separately exercises the real HTTP/WebSocket relay and device code.
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright");
 const [url, output] = process.argv.slice(2);
 if (!url || !output) throw new Error("Usage: node scripts/test-game-browser.mjs http://127.0.0.1:5176/games/ /new/evidence");
@@ -29,12 +29,19 @@ try {
   await page.goto(url); await page.locator("#download:not([hidden])").waitFor();
   assert(await page.locator("#create").isDisabled());
   const href = await page.locator("#payload-link").getAttribute("href");
-  assert(/^\.\/blocks\.[a-f0-9]{12}\.pdlo\.bin$/.test(href));
-  assert((await context.request.get(new URL(href, url).href)).ok());
+  const pocket = new URL(url).searchParams.get("game") === "pocket-puzzle";
+  assert((pocket ? /^\.\/pocket-puzzle\.[a-f0-9]{12}\.pdlo\.bin$/ : /^\.\/blocks\.[a-f0-9]{12}\.pdlo\.bin$/).test(href));
+  assert.equal(await page.locator("#game").inputValue(), pocket ? "pocket-puzzle" : "blocks");
+  const payloadUrl = new URL(href, url);
+  if (payloadUrl.protocol === "file:") {
+    assert.equal((await readFile(payloadUrl)).length, 65532);
+    assert(await page.evaluate(() => window.isSecureContext && "serial" in navigator));
+  } else assert((await context.request.get(payloadUrl.href)).ok());
   checks.push("initial connection gating and packaged source payload download");
   await page.screenshot({ path: `${output}/desktop.png`, fullPage: true });
   await page.locator("#connect").click();
   await page.waitForFunction(() => document.querySelector("#device-state").textContent === "Connected");
+  assert(await page.locator("#game").isDisabled(), "Cannot switch wire game while the serial port is owned");
   await page.locator("#code").fill("BAD"); await page.locator("#join").click();
   await page.waitForFunction(() => document.querySelector("#status").textContent.includes("six-character"));
   await page.locator("#code").fill("ABC123"); await page.locator("#join").click();
@@ -56,6 +63,7 @@ try {
   await page.waitForFunction(() => document.querySelector("#device-state").textContent === "Not connected");
   assert(await page.locator("#room").isHidden());
   assert.equal(await page.locator("#match").textContent(), "Waiting");
+  assert(await page.locator("#game").isEnabled());
   await page.locator("#connect").click(); await page.locator("#create").click();
   await page.locator("#room:not([hidden])").waitFor(); await page.locator("#leave").click();
   await page.waitForFunction(() => document.querySelector("#device-state").textContent === "Not connected");

@@ -3,12 +3,17 @@ import { requestParadiseSerialPort, type WebSerialTransport } from "@tama-breed-
 import { RelayClient } from "../relay-client";
 import { SerialBridge } from "../serial-bridge";
 import { Tet3Observer, type Tet3Packet } from "./tet3";
+import { games, gameId } from "./catalog";
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const connect = element<HTMLButtonElement>("connect"), create = element<HTMLButtonElement>("create");
 const join = element<HTMLButtonElement>("join"), code = element<HTMLInputElement>("code");
-const relay = new RelayClient({ baseUrl: import.meta.env.VITE_RELAY_URL ?? location.origin,
-  appName: "tamahome-blocks-v1", expectedApp: "tamahome-blocks-v1" });
+const gameSelect = element<HTMLSelectElement>("game");
+gameSelect.value = gameId(new URL(location.href).searchParams.get("game") ?? document.body.dataset.defaultGame ?? null);
+let selectedGame = games[gameId(gameSelect.value)];
+const makeRelay = () => new RelayClient({ baseUrl: import.meta.env.VITE_RELAY_URL ?? location.origin,
+  appName: selectedGame.app, expectedApp: selectedGame.app });
+let relay = makeRelay();
 const observers = { in: new Tet3Observer(), out: new Tet3Observer() };
 let serial: WebSerialTransport | undefined, socket: WebSocket | undefined, bridge: SerialBridge | undefined;
 let busy = false, generation = 0;
@@ -16,6 +21,7 @@ let player: number | undefined, currentRound = 0;
 const lines: string[] = [];
 function status(text: string) { element("status").textContent = text; }
 function controls() {
+  gameSelect.disabled = Boolean(serial || socket || busy);
   connect.disabled = busy; connect.textContent = serial ? "Disconnect" : "Connect Paradise";
   create.disabled = join.disabled = !serial || busy || Boolean(socket);
   code.disabled = busy || Boolean(socket);
@@ -117,16 +123,40 @@ element("copy").addEventListener("click", () => {
     () => status("Room code copied."), () => status("Copy the six-character code shown above."));
 });
 window.addEventListener("pagehide", () => { bridge?.stop(); socket?.close(); void serial?.close(); });
-controls();
+async function selectGame() {
+  selectedGame = games[gameId(gameSelect.value)];
+  relay = makeRelay();
+  element("game-name").textContent = selectedGame.title;
+  element("game-controls").textContent = selectedGame.controls;
+  element("download").hidden = true;
+  const chosen = selectedGame;
+  const manifest = gameSelect.value === "blocks" ? "payload.json" : "payload-pocket-puzzle.json";
+  try {
+    // Standalone private preview pages embed the same verified manifests. This
+    // avoids file:// fetch restrictions and keeps one UI/serial implementation.
+    const local = document.getElementById("local-payloads");
+    let data: unknown;
+    if (local) data = JSON.parse(local.textContent ?? "{}")[manifest];
+    else {
+      const response = await fetch(`./${manifest}`);
+      if (!response.ok) return;
+      data = await response.json();
+    }
+    if (chosen !== selectedGame || !data || typeof data !== "object" ||
+        !("file" in data) || !("sha256" in data) || !("application" in data)) return;
+    const { file, sha256, application } = data;
+    if (typeof file !== "string" || !chosen.payloadPattern.test(file) ||
+        typeof sha256 !== "string" || !/^[a-f0-9]{64}$/.test(sha256) || application !== chosen.application) return;
+    const link = element<HTMLAnchorElement>("payload-link");
+    link.href = `./${file}`; link.textContent = `Download ${chosen.title}`;
+    link.title = `SHA-256: ${sha256}`; element("download").hidden = false;
+  } catch { /* Manual send remains available when no staged payload exists. */ }
+}
+gameSelect.addEventListener("change", () => {
+  if (serial || socket || busy) return;
+  const url = new URL(location.href); url.searchParams.set("game", gameId(gameSelect.value));
+  history.replaceState(null, "", url); void selectGame();
+});
+controls(); void selectGame();
 // Optional staging manifest: the package builder verifies the source receipt
 // before including a payload. Missing manifest simply leaves manual send intact.
-void fetch("./payload.json").then(async response => {
-  if (!response.ok) return;
-  const data: unknown = await response.json();
-  if (!data || typeof data !== "object" || !("file" in data) || !("sha256" in data)) return;
-  const { file, sha256 } = data;
-  if (typeof file !== "string" || !/^blocks\.[a-f0-9]{12}\.pdlo\.bin$/.test(file) ||
-      typeof sha256 !== "string" || !/^[a-f0-9]{64}$/.test(sha256)) return;
-  const link = element<HTMLAnchorElement>("payload-link");
-  link.href = `./${file}`; link.title = `SHA-256: ${sha256}`; element("download").hidden = false;
-}).catch(() => { /* The preview can also use a manually supplied payload. */ });
