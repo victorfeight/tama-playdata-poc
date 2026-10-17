@@ -6,7 +6,7 @@
 // pre-rendered PNGs, no charaId → filename lookup; whatever sprite pixels
 // came over the wire is what we paint.
 
-import { ghostPlacement, renderGhost, GhostRender, GhostSpritePart, RgbaImage } from "@tama-breed-poc/tama-protocol";
+import { layoutGhostPreview, renderGhost, GhostRender, RgbaImage } from "@tama-breed-poc/tama-protocol";
 import { GhostPreview } from "./ghost-preview";
 
 export interface CompositedGhost {
@@ -27,49 +27,19 @@ export function composeGhostPreviewFromBin(
     return undefined;
   }
 
-  const parts = [rendered.body, rendered.eyes, rendered.mouth].filter(
-    (p): p is GhostSpritePart => p !== undefined
-  );
-  if (parts.length === 0) {
-    console.warn(
-      `[compositor] no renderable sprites in bin (chara=${rendered.charaId}, eye=${rendered.eyeCharaId})`
-    );
-    return undefined;
-  }
-
-  const base = rendered.body?.frame ?? parts[0]!.frame;
-  const placement = ghostPlacement(rawGhost, base.height, rendered.eyes?.frame.height ?? 32, rendered.mouth?.frame.height ?? 32);
-  if (!placement) {
+  const layout = layoutGhostPreview(rawGhost, rendered);
+  if (!layout) {
     console.warn("[compositor] ghost has no usable Type-0 composite geometry");
     return undefined;
   }
-  const { eyeX, eyeY, mouthX, mouthY } = placement;
-
-  // Grow the canvas to fit negative offsets (some characters have eye/mouth
-  // shifted left/up of the body origin; TamaParadise does the same shift).
-  const drawOffsetX = Math.max(0, -eyeX, -mouthX);
-  const drawOffsetY = Math.max(0, -eyeY, -mouthY);
-  const canvasWidth = Math.max(
-    base.width + drawOffsetX,
-    (rendered.eyes?.frame.width ?? 0) + drawOffsetX + eyeX,
-    (rendered.mouth?.frame.width ?? 0) + drawOffsetX + mouthX
-  );
-  const canvasHeight = Math.max(
-    base.height + drawOffsetY,
-    (rendered.eyes?.frame.height ?? 0) + drawOffsetY + eyeY,
-    (rendered.mouth?.frame.height ?? 0) + drawOffsetY + mouthY
-  );
-
   const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, canvasWidth);
-  canvas.height = Math.max(1, canvasHeight);
+  canvas.width = Math.max(1, layout.width);
+  canvas.height = Math.max(1, layout.height);
   const ctx = canvas.getContext("2d");
   if (!ctx) return undefined;
   ctx.imageSmoothingEnabled = false;
 
-  if (rendered.body) drawRgba(ctx, rendered.body.frame, drawOffsetX, drawOffsetY);
-  if (!placement.bodyOnly && rendered.eyes) drawRgba(ctx, rendered.eyes.frame, drawOffsetX + eyeX, drawOffsetY + eyeY);
-  if (!placement.bodyOnly && rendered.mouth) drawRgba(ctx, rendered.mouth.frame, drawOffsetX + mouthX, drawOffsetY + mouthY);
+  for (const layer of layout.layers) drawRgba(ctx, layer.image, layer.x, layer.y);
 
   // English only on the canvas (fits in the plate). Japanese is still parsed
   // from the bin via ghost-name.ts and available in the GhostRender object.
