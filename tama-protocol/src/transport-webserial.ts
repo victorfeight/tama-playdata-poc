@@ -1,4 +1,4 @@
-import { DEFAULT_SERIAL_OPTIONS, SerialOpenOptions, Transport, withTimeout } from "./transport";
+import { DEFAULT_SERIAL_OPTIONS, SerialOpenOptions, Transport, withTimeout } from "./transport.js";
 import type { BrowserSerialPort } from "./transport/browser-serial-port";
 import { requestWebUsbSerialPort } from "./transport/webusb-serial";
 import type { UsbDeviceFilterLike, UsbDeviceLike } from "./transport/webusb-types";

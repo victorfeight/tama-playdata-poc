@@ -41,6 +41,12 @@ export class ExchangeScreen {
     this.renderGhostElement();
   }
 
+  reset(): void {
+    this.ghostLines.clear();
+    this.messageLine = undefined;
+    this.renderGhostElement();
+  }
+
   private renderGhostElement(): void {
     const lines: string[] = [];
     if (this.messageLine) lines.push(this.messageLine);

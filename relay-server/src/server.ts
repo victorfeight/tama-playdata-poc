@@ -7,12 +7,16 @@ import { Config } from "./config";
 import { openDb } from "./db";
 import { RelayHub } from "./relay";
 import { Role, SessionStore } from "./sessions";
+import { LobbyHub } from "./lobby";
 
 export async function buildServer(config: Config) {
-  const app = Fastify({ logger: true });
+  // Walk X-Forwarded-For only through explicitly trusted proxies. Without this,
+  // nginx makes every visitor share the loopback address's rate-limit bucket.
+  const app = Fastify({ logger: true, trustProxy: config.trustedProxyCidrs ?? ["loopback"] });
   const db = openDb(config.dbPath);
   const sessions = new SessionStore(db, config.sessionTtlMs);
   const relay = new RelayHub(sessions);
+  const lobby = new LobbyHub(Date.now, code => !!sessions.get(code));
 
   await app.register(cors, {
     origin: true,
@@ -26,6 +30,7 @@ export async function buildServer(config: Config) {
   });
   await app.register(websocket, {
     options: {
+      maxPayload: 1024 * 1024,
       // The token rides in Sec-WebSocket-Protocol (see /ws handler below).
       // The browser requires the server to echo back the chosen subprotocol
       // or it rejects the upgrade — so we accept whatever the client sent.
@@ -37,11 +42,37 @@ export async function buildServer(config: Config) {
     }
   });
 
+  app.addHook("preClose", async () => { lobby.close(); });
   app.addHook("onClose", async () => {
     db.close();
   });
 
   app.get("/health", async () => ({ ok: true }));
+
+  // Separate membership credentials per seat. Existing desktop/code-only
+  // endpoints below retain their original contract.
+  const nickname = { type: "string", minLength: 1, maxLength: 80 };
+  const codeParams = { type: "object", required: ["code"], properties: { code: { type: "string", pattern: "^[A-Z0-9]{6}$" } } };
+  app.get("/sessions/lobby", { config: { rateLimit: { max: 120, timeWindow: "1 minute" } } }, async () => ({ rooms: lobby.list() }));
+  app.post<{ Body: { nickname: string; visibility: "public" | "private" } }>("/sessions/lobby", {
+    bodyLimit: 1024,
+    schema: { body: { type: "object", required: ["nickname", "visibility"], additionalProperties: false,
+      properties: { nickname, visibility: { type: "string", enum: ["public", "private"] } } } }
+  }, async (request, reply) => reply.code(201).send(lobby.create(request.body.nickname, request.body.visibility)));
+  app.post<{ Params: { code: string }; Body: { nickname: string } }>("/sessions/lobby/:code/join", {
+    bodyLimit: 1024, config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+    schema: { params: codeParams, body: { type: "object", required: ["nickname"], additionalProperties: false, properties: { nickname } } }
+  }, async request => lobby.join(request.params.code, request.body.nickname));
+  app.post<{ Params: { code: string }; Body: { token: string } }>("/sessions/lobby/:code/leave", {
+    bodyLimit: 1024, config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+    schema: { params: codeParams, body: { type: "object", required: ["token"], additionalProperties: false,
+      properties: { token: { type: "string", pattern: "^[a-f0-9]{64}$" } } } }
+  }, async request => { lobby.leave(request.params.code, request.body.token); return { ok: true }; });
+  app.get<{ Params: { code: string } }>("/ws/lobby/:code", {
+    websocket: true, config: { rateLimit: { max: 60, timeWindow: "1 minute" } }
+  }, (connection, request) => {
+    lobby.attach(request.params.code, pickFirstSubprotocol(request.headers["sec-websocket-protocol"]), connection as unknown as WebSocket);
+  });
 
   // Create a fresh room. Host gets back {code, token}. Anonymous create is
   // intentional — rate-limit + Cloudflare-only UFW are the protection
@@ -49,7 +80,7 @@ export async function buildServer(config: Config) {
   // gate to fetch the token; the token is the WS-upgrade credential.
   app.post("/sessions", async (request, reply) => {
     const appName = pickHeader(request.headers["x-app-name"]);
-    const row = sessions.create(appName);
+    const row = sessions.create(appName, Date.now(), code => lobby.has(code));
     return reply.code(201).send({
       code: row.code,
       token: row.token,
@@ -62,9 +93,12 @@ export async function buildServer(config: Config) {
   // 6-char code is the gate, the token is just the server-issued credential
   // the WS upgrade will check. Same value across calls so peer-refresh-
   // rejoin works without churn.
-  app.post<{ Params: { code: string } }>("/sessions/:code/join", async (request, reply) => {
+  app.post<{ Params: { code: string } }>("/sessions/:code/join", {
+    config: { rateLimit: { max: 60, timeWindow: "1 minute" } }
+  }, async (request, reply) => {
     sessions.expire();
     const { code } = request.params;
+    if (lobby.has(code)) return reply.send(lobby.joinLegacy(code));
     const row = sessions.get(code);
     if (!row || !sessions.isActive(row) || !row.token) {
       return reply.code(404).send({ error: "session not found" });
@@ -72,7 +106,9 @@ export async function buildServer(config: Config) {
     return reply.send({ token: row.token, app: row.app });
   });
 
-  app.get<{ Params: { code: string }; Querystring: { role?: Role } }>("/ws/:code", { websocket: true }, (connection, request) => {
+  app.get<{ Params: { code: string }; Querystring: { role?: Role } }>("/ws/:code", {
+    websocket: true, config: { rateLimit: { max: 60, timeWindow: "1 minute" } }
+  }, (connection, request) => {
     const { code } = request.params;
     const role = request.query.role;
     // Token rides in Sec-WebSocket-Protocol (subprotocol smuggling, per the
@@ -83,6 +119,11 @@ export async function buildServer(config: Config) {
 
     if (role !== "a" && role !== "b") {
       ws.close(4400, "role must be a or b");
+      return;
+    }
+
+    if (lobby.has(code)) {
+      lobby.attachLegacy(code, role, token, ws);
       return;
     }
 

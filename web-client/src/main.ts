@@ -2,7 +2,8 @@ import "./ui/styles.css";
 import { config } from "./config";
 import { composeGhostPreviewFromBin } from "./ghost-compositor";
 import { toGhostPreview } from "./ghost-preview";
-import { RelayClient } from "./relay-client";
+import { LobbyClient } from "./lobby-client";
+import { PlaydateLobby } from "./ui/playdate-lobby";
 import { SerialBridge } from "./serial-bridge";
 import { Drawer } from "./ui/drawer";
 import { ExchangeScreen } from "./ui/screen-exchange";
@@ -25,28 +26,12 @@ import {
   WebUsbSerialPort
 } from "@tama-breed-poc/tama-protocol";
 
-// Simple lifecycle: attach the bridge the moment both a dongle and a socket
-// are open. Re-clicking Create/Join automatically drops any existing socket.
-// Dongle disconnects (USB unplug) and dead bridges (serial.read failure) both
-// funnel into the same recovery path: `releaseSerial()` / `bridge = undefined`,
-// which makes the next user click attach cleanly. No browser refresh needed.
-
+// The lobby owns the room socket; this page owns the dongle and ghost scene.
+// Replacing a room never creates another pending serial reader.
 let serial: WebSerialTransport | undefined;
 let bridge: SerialBridge | undefined;
 let socket: WebSocket | undefined;
-let currentRoom: string | undefined;
-// Last room this tab was actively in; survives WS close so Join Room with
-// the same code rejoins in the same role (sticky-rejoin). Cleared/replaced
-// when the user explicitly enters a different room or creates a new one.
-let lastRoom: string | undefined;
-let role: "host" | "guest" | undefined;
 let serialOpenPending = false;
-const savedRoom = sessionStorage.getItem("playdate-room");
-const savedRole = sessionStorage.getItem("playdate-role");
-if (savedRoom && (savedRole === "host" || savedRole === "guest")) {
-  lastRoom = savedRoom;
-  role = savedRole;
-}
 
 const canvas = must<HTMLCanvasElement>("link-canvas");
 const scene = new Scene(new Drawer(canvas));
@@ -95,6 +80,8 @@ function beginSession(): void {
   sides.local = {};
   sides.peer = {};
   currentFriendship = undefined;
+  exchange.reset();
+  lastByteAt = 0;
   outObserver.reset();
   inObserver.reset();
   scene.beginSession();
@@ -289,9 +276,20 @@ const bytesOutEl = must("bytes-out");
 // "live" = a byte was seen within ACTIVITY_LIVE_MS, "idle" = paired but quiet.
 let lastByteAt = 0;
 const ACTIVITY_LIVE_MS = 2000;
-const codeInput = must<HTMLInputElement>("room-code");
-if (lastRoom) codeInput.value = lastRoom;
-const relay = new RelayClient({ baseUrl: config.relayUrl, appName: "playdate-web" });
+const lobby = new PlaydateLobby(new LobbyClient(config.relayUrl), {
+  socket(next) {
+    bridge?.stop();
+    bridge = undefined;
+    socket = next;
+    beginSession();
+    bytesInEl.textContent = "0";
+    bytesOutEl.textContent = "0";
+    if (next) void attachBridge();
+    // Defer the HUD until the constructor has finished assigning lobby.
+    queueMicrotask(renderHud);
+  },
+  peerChanged() { beginSession(); }
+});
 
 // USB unplug funnels into the same recovery path as a manual click.
 navigator.serial?.addEventListener("disconnect", (event) => {
@@ -307,11 +305,12 @@ navigator.usb?.addEventListener("disconnect", (event) => {
 
 must<HTMLButtonElement>("connect-serial").addEventListener("click", async () => {
   if (serialOpenPending) return;
-  if (serial) await releaseSerial();
+  if (serial) { await releaseSerial(); return; }
 
   try {
     if (!hasParadiseSerial()) throw new Error("WebSerial and WebUSB unavailable");
     serialOpenPending = true;
+    renderHud();
     showAppMessage("Choose your Paradise dongle.");
     serial = await connectDongle();
     showAppMessage("Dongle connected.");
@@ -321,111 +320,9 @@ must<HTMLButtonElement>("connect-serial").addEventListener("click", async () => 
     showAppError(error);
   } finally {
     serialOpenPending = false;
-  }
-});
-
-must<HTMLButtonElement>("create-room").addEventListener("click", async () => {
-  // If we're already in a live room, treat as a no-op. Tearing the socket
-  // down to make a new one would kick the peer for no benefit.
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    showAppMessage("Already in a room. Refresh to start a new one.");
-    return;
-  }
-  try {
-    await dropExistingSocket();
-    const { code, token } = await relay.createRoom();
-    codeInput.value = code;
-    currentRoom = code;
-    lastRoom = code;
-    role = "host";
-    rememberRoom(code);
-    await connectWs(code, "a", token);
-  } catch (error) {
-    showAppError(error);
-  }
-});
-
-must<HTMLButtonElement>("join-room").addEventListener("click", async () => {
-  const code = codeInput.value.trim().toUpperCase();
-  if (!code) return;
-  // If we're already live in this exact room, the click is accidental —
-  // don't tear down our own socket (which the relay reads as us leaving and
-  // kicks the peer with "peer closed").
-  if (socket && socket.readyState === WebSocket.OPEN && currentRoom === code) {
-    showAppMessage(`Already in room ${code}.`);
-    return;
-  }
-  try {
-    await dropExistingSocket();
-    // Sticky-rejoin only when the code matches the last room we were in.
-    // A different code means the user is intentionally entering someone
-    // else's room, so default to guest regardless of any prior host role.
-    if (code !== lastRoom) role = "guest";
-    currentRoom = code;
-    lastRoom = code;
-    const wsRole = role === "host" ? "a" : "b";
-    rememberRoom(code);
-    // Knowing the 6-char code is the gate to fetch the token. Server
-    // returns the same token across repeated calls (idempotent), so a
-    // sticky-rejoin after a peer-refresh kick re-auths cleanly without
-    // ever asking the user for more than the room code.
-    const token = await relay.fetchToken(code);
-    await connectWs(code, wsRole, token);
-  } catch (error) {
-    showAppError(error);
-  }
-});
-
-async function dropExistingSocket(): Promise<void> {
-  if (!socket || socket.readyState >= WebSocket.CLOSING) return;
-  const done = new Promise<void>((resolve) => {
-    socket!.addEventListener("close", () => resolve(), { once: true });
-  });
-  socket.close();
-  await done;
-}
-
-async function connectWs(code: string, wsRole: "a" | "b", token: string): Promise<void> {
-  const ws = relay.connect(code, wsRole, token);
-  socket = ws;
-  ws.addEventListener("message", (event) => {
-    if (socket !== ws || typeof event.data !== "string") return;
-    if (event.data === "peer disconnected") {
-      beginSession();
-      showAppMessage("Peer disconnected");
-    } else if (event.data === "peer connected") {
-      beginSession();
-      showAppMessage("Peer connected");
-    }
-  });
-  // Capture the socket reference so a stale close event from a previously
-  // dropped socket can't clobber a freshly assigned one (Bug 3a).
-  ws.addEventListener("open", () => {
-    if (socket !== ws) return;
-    showAppMessage("Room open.");
     renderHud();
-    void attachBridge();
-  });
-  ws.addEventListener("close", () => {
-    if (socket !== ws) return;
-    bridge?.stop();
-    bridge = undefined;
-    socket = undefined;
-    // Capture the room we were in before clearing live state, so Join Room
-    // with the same code can recognise a rejoin and keep the same role.
-    lastRoom = currentRoom;
-    currentRoom = undefined;
-    bytesInEl.textContent = "0";
-    bytesOutEl.textContent = "0";
-    beginSession();
-    renderHud();
-  });
-}
-
-function rememberRoom(code: string): void {
-  sessionStorage.setItem("playdate-room", code);
-  if (role) sessionStorage.setItem("playdate-role", role);
-}
+  }
+});
 
 async function attachBridge(): Promise<void> {
   if (!serial || !socket || socket.readyState !== WebSocket.OPEN) return;
@@ -443,34 +340,28 @@ async function attachBridge(): Promise<void> {
       lastByteAt = performance.now();
     },
     error(error) {
-      // Bridge owns its own death — clearing the reference here is what
-      // lets the next user click re-attach without a refresh. Also close
-      // the WS so the peer's observer gets a clean reset instead of
-      // sitting on a stale partial packet (their ws.close handler runs
-      // beginSession on their side).
-      bridge = undefined;
-      socket?.close();
-      renderHud();
+      // Release a failed port while retaining room membership for recovery.
+      void releaseSerial();
       showAppError(error);
     }
   });
   bridge.start();
-  showAppMessage("Exchange live. Enter Friend menu on the device.");
+  showAppMessage("Adapter connected. Follow the Playdate steps beside the scene.");
 }
 
 async function releaseSerial(): Promise<void> {
   if (!serial) return;
+  serialOpenPending = true;
   const dyingSerial = serial;
   bridge?.stop();
   bridge = undefined;
   serial = undefined;
-  // Close the WS too so the relay kicks the peer (4000 'peer closed').
-  // Their ws.close handler runs beginSession() on that side, which resets
-  // their observers — preventing the stale-partial-packet buffer that
-  // would otherwise corrupt the next session for them.
-  socket?.close();
+  beginSession();
+  showAppMessage("Adapter disconnected. You can reconnect without leaving your room.");
   renderHud();
-  await dyingSerial.close().catch(() => undefined);
+  try { await dyingSerial.close(); }
+  catch { /* Unplug may already have closed the stream. */ }
+  finally { serialOpenPending = false; renderHud(); }
 }
 
 /**
@@ -480,9 +371,15 @@ async function releaseSerial(): Promise<void> {
  */
 function renderHud(): void {
   portEl.textContent = serial ? "connected" : "disconnected";
-  const isRoomLive = !!socket && socket.readyState <= WebSocket.OPEN;
-  roomEl.textContent = isRoomLive && currentRoom ? currentRoom : "none";
-  roleEl.textContent = isRoomLive && role ? role : "—";
+  const isRoomLive = socket?.readyState === WebSocket.OPEN;
+  roomEl.textContent = lobby.roomCode ?? "none";
+  roleEl.textContent = isRoomLive ? lobby.role ?? "—" : "—";
+  const connect = must<HTMLButtonElement>("connect-serial");
+  connect.textContent = serialOpenPending ? "Connecting…" : serial ? "Disconnect" : "Connect adapter";
+  connect.disabled = serialOpenPending;
+  must("adapter-status").textContent = serial ? "Adapter connected" : "Adapter disconnected";
+  must("adapter-status").dataset.connected = String(!!serial);
+  lobby.setAdapter(!!serial);
   const paired = !!serial && isRoomLive;
   if (!paired) activityEl.textContent = "—";
   else activityEl.textContent = (performance.now() - lastByteAt) < ACTIVITY_LIVE_MS ? "live" : "idle";
@@ -502,17 +399,22 @@ function must<T extends HTMLElement = HTMLElement>(id: string): T {
 }
 
 function showAppMessage(message: string): void {
+  must("connection-message").hidden = true;
   exchange.showMessage(message);
   scene.setStatus(shortStatus(message));
 }
 
 function showAppError(error: unknown): void {
   const message = friendlyError(error);
+  must("connection-message").textContent = message;
+  must("connection-message").hidden = false;
   exchange.showMessage(message);
   scene.setStatus(shortStatus(message));
 }
 
 function shortStatus(message: string): string {
+  if (/Adapter connected/i.test(message)) return "adapter connected";
+  if (/Adapter disconnected/i.test(message)) return "adapter disconnected";
   if (/choose/i.test(message)) return "choose dongle";
   if (/dongle connected/i.test(message)) return "dongle connected";
   if (/room open/i.test(message)) return "room open";

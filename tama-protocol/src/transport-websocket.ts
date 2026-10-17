@@ -1,4 +1,4 @@
-import { Transport } from "./transport";
+import { Transport } from "./transport.js";
 
 export class WebSocketTransport implements Transport {
   readonly name = "websocket";

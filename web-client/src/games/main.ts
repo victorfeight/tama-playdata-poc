@@ -1,9 +1,10 @@
 import "./style.css";
-import { requestParadiseSerialPort, type WebSerialTransport } from "@tama-breed-poc/tama-protocol";
+import { requestParadiseSerialPort, UartConnectionError, type WebSerialTransport } from "@tama-breed-poc/tama-protocol";
 import { RelayClient } from "../relay-client";
 import { SerialBridge } from "../serial-bridge";
 import { Tet3Observer, type Tet3Packet } from "./tet3";
 import { games, gameId } from "./catalog";
+import { GameInstallService, isInstallAsset, isMusicAssets, type InstallAsset, type MusicAssets, type InstallProgress } from "../game-install-service";
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const connect = element<HTMLButtonElement>("connect"), create = element<HTMLButtonElement>("create");
@@ -17,6 +18,10 @@ let relay = makeRelay();
 const observers = { in: new Tet3Observer(), out: new Tet3Observer() };
 let serial: WebSerialTransport | undefined, socket: WebSocket | undefined, bridge: SerialBridge | undefined;
 let busy = false, generation = 0;
+let gameAsset: InstallAsset | undefined, musicAssets: MusicAssets | undefined;
+let transferring = false;
+const installer = new GameInstallService(new URL("./", location.href));
+const musicButton = element<HTMLButtonElement>("install-music"), sendButton = element<HTMLButtonElement>("send-game");
 let player: number | undefined, currentRound = 0;
 const lines: string[] = [];
 function status(text: string) { element("status").textContent = text; }
@@ -27,6 +32,8 @@ function controls() {
   code.disabled = busy || Boolean(socket);
   element<HTMLButtonElement>("leave").disabled = busy;
   element("device-state").textContent = serial ? "Connected" : "Not connected";
+  sendButton.disabled = !serial || busy || !!socket || !gameAsset;
+  musicButton.disabled = !serial || busy || !!socket || !musicAssets;
 }
 function log(text: string) {
   lines.push(text); if (lines.length > 40) lines.shift(); element("log").textContent = lines.join("\n");
@@ -72,7 +79,7 @@ connect.addEventListener("click", () => void run(async () => {
   const selected = await requestParadiseSerialPort();
   try { await selected.open({ baudRate: 460800 }); }
   catch (error) { await selected.close(); throw error; }
-  serial = selected; status("Connected. Create a room or join your friend’s code. Keep the game on its main menu.");
+  serial = selected; status("Connected. Send the game above, or join a room if it’s already on your toy.");
 }));
 async function enter(role: "a" | "b") {
   if (!serial) return;
@@ -123,45 +130,78 @@ element("copy").addEventListener("click", () => {
     () => status("Room code copied."), () => status("Copy the six-character code shown above."));
 });
 window.addEventListener("pagehide", () => { bridge?.stop(); socket?.close(); void serial?.close(); });
+function installProgress(value: InstallProgress) {
+  element("install-progress").hidden = false;
+  element("install-status").textContent = value.phase;
+  const bar = element<HTMLProgressElement>("transfer-progress");
+  bar.hidden = false;
+  if (value.total === undefined) bar.removeAttribute("value");
+  else { bar.max = value.total; bar.value = value.done ?? 0; }
+}
+async function install(kind: "music" | "game") {
+  if (!serial || socket) return;
+  transferring = true;
+  try {
+    if (kind === "music") {
+      if (!musicAssets) throw new Error("Music files are not available yet.");
+      const result = await installer.installMusic(serial, musicAssets, installProgress);
+      log(`Music verified: ${result.written} sectors written, ${result.matched} already matched.`);
+      element("install-status").textContent = "Music verified. Press C on your toy to return home, then open Connection → Download → Download and click Send game. Keep the adapter connected.";
+      element("install-instruction").textContent = "Next: press C to return home, reopen Download, then send the game below.";
+    } else {
+      if (!gameAsset) throw new Error("The game download is not available yet.");
+      await installer.sendGame(serial, gameAsset, installProgress);
+      element("install-status").textContent = "Game received. Wait for its main menu, then create or join a room below. Keep this connection open.";
+      element("install-instruction").textContent = "Your game is sent. Keep it on its main menu until your friend joins.";
+      status("Ready to meet a friend. Create a room or enter their code below.");
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Transfer stopped. Check the toy before retrying.";
+    element("install-progress").hidden = false;
+    element("install-status").textContent = message;
+    status(message);
+    if (error instanceof UartConnectionError) await disconnect(message);
+  } finally { transferring = false; element("transfer-progress").hidden = true; }
+}
+musicButton.addEventListener("click", () => void run(() => install("music")));
+sendButton.addEventListener("click", () => void run(() => install("game")));
+window.addEventListener("beforeunload", event => {
+  if (transferring) { event.preventDefault(); event.returnValue = ""; }
+});
 async function selectGame() {
   selectedGame = games[gameId(gameSelect.value)];
-  relay = makeRelay();
+  relay = makeRelay(); gameAsset = undefined; musicAssets = undefined;
   element("game-name").textContent = selectedGame.title;
   element("game-controls").textContent = selectedGame.controls;
   element("download").hidden = true;
   element("music-setup").hidden = gameSelect.value !== "pocket-puzzle";
-  element("setup-download").hidden = true;
+  element("install-progress").hidden = true;
+  element("game-download-status").textContent = "Checking game availability…";
+  controls();
   const chosen = selectedGame;
   const manifest = gameSelect.value === "blocks" ? "payload.json" : "payload-pocket-puzzle.json";
   try {
-    // Standalone private preview pages embed the same verified manifests. This
-    // avoids file:// fetch restrictions and keeps one UI/serial implementation.
     const local = document.getElementById("local-payloads");
     let data: unknown;
     if (local) data = JSON.parse(local.textContent ?? "{}")[manifest];
     else {
       const response = await fetch(`./${manifest}`);
-      if (!response.ok) return;
+      if (!response.ok) throw new Error("Game files are unavailable. Refresh to try again.");
       data = await response.json();
     }
-    if (chosen !== selectedGame || !data || typeof data !== "object" ||
-        !("file" in data) || !("sha256" in data) || !("application" in data)) return;
-    const { file, sha256, application } = data;
-    if (typeof file !== "string" || !chosen.payloadPattern.test(file) ||
-        typeof sha256 !== "string" || !/^[a-f0-9]{64}$/.test(sha256) || application !== chosen.application) return;
+    if (chosen !== selectedGame) return;
+    if (!isInstallAsset(data) || data.bytes > 65536 || !chosen.payloadPattern.test(data.file) ||
+        !("application" in data) || data.application !== chosen.application) throw new Error("Game package needs updating. Refresh to try again.");
+    gameAsset = data;
     const link = element<HTMLAnchorElement>("payload-link");
-    link.href = `./${file}`; link.textContent = `Download ${chosen.title}`;
-    link.title = `SHA-256: ${sha256}`; element("download").hidden = false;
-    if ("setup" in data && data.setup && typeof data.setup === "object" && "file" in data.setup && "sha256" in data.setup) {
-      const setup = data.setup;
-      if (typeof setup.file === "string" && /^pocket-puzzle-setup\.[a-f0-9]{12}\.zip$/.test(setup.file) &&
-          typeof setup.sha256 === "string" && /^[a-f0-9]{64}$/.test(setup.sha256)) {
-        const setupLink = element<HTMLAnchorElement>("setup-link");
-        setupLink.href = `./${setup.file}`; setupLink.title = `SHA-256: ${setup.sha256}`;
-        element("setup-download").hidden = false;
-      }
-    }
-  } catch { /* Manual send remains available when no staged payload exists. */ }
+    link.href = `./${data.file}`; link.textContent = `Download ${chosen.title}`;
+    link.title = `SHA-256: ${data.sha256}`; element("download").hidden = false;
+    if ("music" in data && isMusicAssets(data.music)) musicAssets = data.music;
+    element("music-setup").hidden = !musicAssets;
+    element("game-download-status").textContent = "";
+  } catch (error) {
+    if (chosen === selectedGame) element("game-download-status").textContent = error instanceof Error ? error.message : "Could not load game files.";
+  } finally { controls(); }
 }
 gameSelect.addEventListener("change", () => {
   if (serial || socket || busy) return;

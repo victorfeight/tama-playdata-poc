@@ -8,7 +8,8 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const output = process.argv[2];
 const fullWeb = process.argv.slice(3).includes("--full-web");
 const setupArg = process.argv.slice(3).find(arg => arg.startsWith("--music-setup="));
-const payloadReceipts = process.argv.slice(3).filter(arg => arg !== "--full-web" && arg !== setupArg);
+const streamArg = process.argv.slice(3).find(arg => arg.startsWith("--music-stream="));
+const payloadReceipts = process.argv.slice(3).filter(arg => arg !== "--full-web" && arg !== setupArg && arg !== streamArg);
 if (!output) throw new Error("Usage: node scripts/package-game-demo.mjs /new/staging-directory [source-app-build.json ...]");
 const destination = path.resolve(output), dist = path.join(root, "web-client/dist");
 const html = await readFile(path.join(dist, "games/index.html"), "utf8");
@@ -34,7 +35,7 @@ for (const payloadReceipt of payloadReceipts) {
   if (build.source_only !== true || build.payload_sha256 !== sha256 || build.game !== receipt.application)
     throw new Error("Underlying build does not establish a matching source-only payload");
   payloads.push({ bytes, manifestName: name === "blocks" ? "payload.json" : "payload-pocket-puzzle.json",
-    manifest: { file: `${name}.${sha256.slice(0, 12)}.pdlo.bin`, sha256,
+    manifest: { file: `${name}.${sha256.slice(0, 12)}.pdlo.bin`, sha256, bytes: bytes.length,
     application: receipt.application, hardwareQualified: receipt.hardware_qualified === true,
     sourceBuildReceiptSha256: receipt.build_receipt_sha256 } });
 }
@@ -51,6 +52,28 @@ if (setupArg) {
   setup = { bytes, file: `pocket-puzzle-setup.${sha256.slice(0, 12)}.zip`, sha256 };
   puzzle.manifest.setup = { file: setup.file, sha256 };
 }
+const musicFiles = [];
+if (streamArg) {
+  const directory = streamArg.slice("--music-stream=".length);
+  const receipt = JSON.parse(await readFile(path.join(directory, "manifest.json"), "utf8"));
+  const puzzle = payloads.find(p => p.manifest.application === "pocket-puzzle");
+  if (!puzzle || receipt.operation !== "install-only" || receipt.protocol_profile !== "puzzle-music" ||
+      !Number.isInteger(receipt.sectors) || receipt.sectors < 1 || receipt.sectors > 256 ||
+      JSON.stringify(receipt.protected_range) !== "[0,15728640]") throw new Error("Expected reviewed music-only stream package");
+  const music = { profile: receipt.protocol_profile, sectors: receipt.sectors };
+  for (const [key, input, label] of [["bootstrap", "bootstrap.pdlo.bin", "helper"], ["bundle", "media.tpfw.bin", "bundle"]]) {
+    const bytes = await readFile(path.join(directory, input));
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    if (sha256 !== receipt[`${key}_sha256`] || bytes.length !== receipt[`${key}_bytes`]) throw new Error(`Music ${label} differs from reviewed receipt`);
+    if (key === "bootstrap" && bytes.length !== 65532) throw new Error("Invalid music helper size");
+    if (key === "bundle" && bytes.length !== 128 + receipt.sectors * 4132) throw new Error("Invalid music stream size");
+    const file = `music-${label}.${sha256.slice(0, 12)}.bin`;
+    music[label] = { file, sha256, bytes: bytes.length };
+    musicFiles.push({ file, bytes });
+  }
+  puzzle.manifest.music = music;
+}
+if (fullWeb && !streamArg) throw new Error("Full web releases require --music-stream so browser music installation is included");
 await mkdir(destination); // Exclusive destination: do not overwrite another release.
 for (const name of fullWeb ? ["games", "assets", "sprites", "index.html"] : ["games", "assets"])
   await cp(path.join(dist, name), path.join(destination, name), { recursive: true });
@@ -59,6 +82,7 @@ for (const payload of payloads) {
   await writeFile(path.join(destination, "games", payload.manifestName), JSON.stringify(payload.manifest, null, 2) + "\n");
 }
 if (setup) await writeFile(path.join(destination, "games", setup.file), setup.bytes);
+for (const music of musicFiles) await writeFile(path.join(destination, "games", music.file), music.bytes);
 const files = {};
 async function scan(dir) {
   for (const entry of await readdir(path.join(destination, dir), { withFileTypes: true })) {

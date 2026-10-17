@@ -8,10 +8,24 @@
     <section class="card">
       <label>Choose your game<select id="game"><option value="blocks">TamaHome Blocks</option><option value="pocket-puzzle">Pocket Puzzle</option></select></label>
       <div class="row"><h2>Your connection</h2><span id="device-state" class="pill">Not connected</span></div>
-      <details id="music-setup" hidden><summary>Optional: add music once</summary><p>Already installed the Pocket Puzzle music? Skip this step. Otherwise, unzip the setup download, disconnect TamaHome and run INSTALL-MUSIC.cmd with your toy on Connection → Download → Download. Wait for “PASS: music verified”, then press C to return.</p><p id="setup-download" hidden><a id="setup-link" download>Download music setup</a> · Python 3 required. Mac/Linux: run <code>python3 install_music.py</code>.</p><p>The helper installs the music bank without a full firmware restore. You can play online without music.</p></details>
-      <p>Send <strong id="game-name">TamaHome Blocks</strong> through TamaHome’s Launchpad. Then disconnect UART in TamaHome, leave the game on its main menu, and connect here.</p>
-      <p id="download" hidden><a id="payload-link" download>Download Blocks</a> <span class="subtle">· experimental preview</span></p>
+      <p id="install-instruction">Connect your Paradise. To send a game, open <strong>Connection → Download → Download</strong> on the toy.</p>
       <button id="connect">Connect Paradise</button>
+      <div id="install-actions" class="install-actions">
+        <div id="music-setup" hidden>
+          <h3>Music · optional, installed once</h3>
+          <p>Open Download on your toy, then install or check the soundtrack. Music already installed? You can go straight to sending the game.</p>
+          <button id="install-music" class="secondary" disabled>Install / verify music</button>
+        </div>
+        <div>
+          <h3>Send <span id="game-name">TamaHome Blocks</span></h3>
+          <p>With your toy on <strong>Connection → Download → Download</strong>, send the game here. Keep the adapter connected afterward.</p>
+          <button id="send-game" disabled>Send game</button>
+        </div>
+      </div>
+      <div id="install-progress" hidden aria-live="polite"><p id="install-status" role="status"></p><progress id="transfer-progress" max="1" aria-label="Transfer progress"></progress></div>
+      <p id="game-download-status" class="subtle" role="status">Checking game availability…</p>
+      <details id="download" hidden><summary>Keep a copy of the game</summary><a id="payload-link" download>Download game BIN</a></details>
+      <p class="subtle">Game already on your toy? Leave it at its main menu and join a room below.</p>
     </section>
     <section class="card">
       <h2>Meet a friend</h2>

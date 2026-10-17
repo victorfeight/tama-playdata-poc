@@ -14,6 +14,36 @@ afterEach(async () => {
 });
 
 describe("relay server", () => {
+  it("separates proxy visitors, ignores spoofed hops and keeps reconnect limits separate from creation", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tama-relay-proxy-"));
+    const app = await buildServer({ port: 0, dbPath: path.join(dir, "sessions.db"), sessionTtlMs: 600_000,
+      trustedProxyCidrs: ["loopback", "173.245.48.0/20"] });
+    closeServer = async () => app.close();
+    const headers = { "x-forwarded-for": "203.0.113.7, 173.245.48.1" };
+    const first = await app.inject({ method: "POST", url: "/sessions", headers, remoteAddress: "127.0.0.1" });
+    const { code, token } = first.json();
+    expect(first.statusCode).toBe(201);
+    for (let i = 0; i < 12; i++) {
+      const joined = await app.inject({ method: "POST", url: `/sessions/${code}/join`, headers, remoteAddress: "127.0.0.1" });
+      expect(joined.statusCode).toBe(200); expect(joined.json().token).toBe(token);
+    }
+    // Creation retains its ten-per-minute bound, unaffected by joining.
+    for (let i = 1; i < 10; i++)
+      expect((await app.inject({ method: "POST", url: "/sessions", headers, remoteAddress: "127.0.0.1" })).statusCode).toBe(201);
+    expect((await app.inject({ method: "POST", url: "/sessions", headers, remoteAddress: "127.0.0.1" })).statusCode).toBe(429);
+    // A made-up leftmost hop cannot change the actual visitor's bucket.
+    expect((await app.inject({ method: "POST", url: "/sessions", remoteAddress: "127.0.0.1",
+      headers: { "x-forwarded-for": "198.51.100.99, 203.0.113.7, 173.245.48.1" } })).statusCode).toBe(429);
+    // Another visitor behind the same trusted edge still has their own limit.
+    expect((await app.inject({ method: "POST", url: "/sessions", remoteAddress: "127.0.0.1",
+      headers: { "x-forwarded-for": "203.0.113.8, 173.245.48.1" } })).statusCode).toBe(201);
+    // A direct untrusted peer cannot evade its bucket by supplying XFF.
+    for (let i = 0; i < 11; i++) {
+      const result = await app.inject({ method: "POST", url: "/sessions", remoteAddress: "198.51.100.1",
+        headers: { "x-forwarded-for": `203.0.113.${20 + i}` } });
+      expect(result.statusCode).toBe(i < 10 ? 201 : 429);
+    }
+  });
   it("relays bytes both directions", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tama-relay-"));
     const app = await buildServer({

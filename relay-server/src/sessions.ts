@@ -26,11 +26,11 @@ export class SessionStore {
     private readonly ttlMs: number
   ) {}
 
-  create(app: string | null = null, now = Date.now()): SessionRow {
+  create(app: string | null = null, now = Date.now(), codeInUse: (code: string) => boolean = () => false): SessionRow {
     this.expire(now);
     for (let attempt = 0; attempt < 10; attempt += 1) {
       const code = crypto.randomBytes(4).toString("base64url").replace(/[^a-zA-Z0-9]/g, "").slice(0, 6).toUpperCase();
-      if (code.length !== 6) continue;
+      if (code.length !== 6 || codeInUse(code)) continue;
       try {
         const token = generateToken();
         this.db

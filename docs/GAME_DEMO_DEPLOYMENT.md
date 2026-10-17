@@ -14,27 +14,33 @@ ordering, repair native SHS2 visitor portraits, or implement 2–16-player hosti
    production build with `VITE_RELAY_URL=https://playdate.bbamorachi.us`.
    Legacy private ghost tests accept `TAMA_GHOST_FIXTURE=/path/to/ghost.bin`;
    their old symlink is not portable. Do not silently skip them.
-2. Build Pocket Puzzle with the SDK `build_app.py`. Package the existing reviewed
-   music stream with `examples/music-installer/package.py --archive SETUP.zip`;
-   this emits a ZIP hash receipt. Music is optional and installed once; the game
-   is a separate ordinary Download payload. Never ask users for a full restore.
+2. Build Pocket Puzzle with the SDK `build_app.py`. Use the reviewed source
+   music stream directory (`manifest.json`, helper and bundle); music is optional
+   and installed/verified by the browser. The game is a separate ordinary
+   Download payload. No full restore or CLI setup is required.
 3. Commit the source, then stage **both** pages, both verified games and optional
-   setup using the shared packager:
+   music helper/bundle using the shared packager:
 
    ```sh
    node scripts/package-game-demo.mjs NEW_RELEASE --full-web \
-     BLOCKS/app-build.json PUZZLE/app-build.json --music-setup=SETUP.zip
+     BLOCKS/app-build.json PUZZLE/app-build.json --music-stream=MUSIC_DIRECTORY
    python3 scripts/publish-web-release.py NEW_RELEASE
    ```
 
-   Full releases require both game receipts. Setup hash and bundled game must
-   match the same Puzzle receipt. The manifest records source commit and every
+   Full releases require both game receipts and browser music assets. The
+   manifest records source commit and every
    public file hash. Never upload private firmware/config/test directories.
 4. Push main. Upload the package to a new `/srv/game-demo/releases/RELEASE/web`
    directory; verify the manifest again on the server. Keep the old server HEAD
-   and static tree. Dependencies are unchanged in this release.
+   and static tree. Install the committed frozen workspace lockfile; the relay
+   now depends on the shared protocol workspace.
 5. Fetch the reviewed commit, stage its relay sources on a separate loopback port
    and private database, and run `scripts/probe-game-relay.mjs` against it.
+   Also run lobby compatibility tests against staging. Configure
+   `RELAY_TRUSTED_PROXIES` using the inspected deployment and reviewed
+   `docs/relay-proxy.env.example`; default loopback-only trust cannot distinguish
+   visitors behind the same Cloudflare edge. Test trusted-header isolation
+   before publishing. Do not set unrestricted proxy trust.
    Stop that temporary process afterward. Check live port3001 has no connected
    sessions before the short service restart; do not interrupt an active match.
 6. Fast-forward `/srv/playdate` to the reviewed commit, restart only
@@ -52,9 +58,10 @@ ordering, repair native SHS2 visitor portraits, or implement 2–16-player hosti
    two-way room bytes and reconnect behavior. Physical two-player/WAN testing
    remains separate from emulator/browser/loopback checks.
 
-The setup UI is a collapsed optional music section, a normal game download,
-Connect Paradise, and create/join room. Disconnect TamaHome UART before the
-browser connects. Once both peers arrive, choose Versus on both toys.
+The setup UI connects once, offers optional Install/verify music, guides C return
+and Download re-entry, then sends the game and keeps the adapter for create/join.
+Disconnect TamaHome UART before the browser connects. Once both peers arrive,
+choose Versus on both toys. The current game flow remains two-player.
 
 The original read-only audit and initial frontend-only plan follow for provenance;
 use the combined route above for new full deployments.

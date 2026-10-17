@@ -1,5 +1,5 @@
 import { PacketType } from "./packets";
-import { Transport } from "./transport";
+import { Transport } from "./transport.js";
 import { PlayType, TCPResult } from "./types";
 
 export type PlaydatePhase =
