@@ -98,7 +98,7 @@ Production now uses the reviewed Cloudflare ranges; see
 
 ## Shared starter and ready prompts
 
-The subsequent switchable starter/ready flow and diagnostic logs are locally
-qualified but not yet live. See [the flow and incident record](PLAYDATE_START_FLOW.md).
+The subsequent switchable starter/ready flow and diagnostic logs are live at
+`23b0b2d`; all eight public browser check groups pass with simulated UART. See [the flow and incident record](PLAYDATE_START_FLOW.md).
 The successful retry after dongle reconnect does not establish a role restriction
 or fix the unresolved adapter/device recovery issue.

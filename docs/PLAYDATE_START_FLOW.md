@@ -1,8 +1,8 @@
 # Playdate starter and ready prompts — 2026-10-17
 
-Status: committed/pushed at `23b0b2d`, locally and server-stage qualified;
-not yet published. The live baseline
-is `4c98c65`. Publishing this change requires a relay restart and closes rooms.
+Status: published at `23b0b2d` on 2026-10-17 after the user confirmed the
+current room was finished. Replaces `4c98c65`. The relay restart completed;
+both players should refresh, reconnect their adapters and join a new room.
 
 The room has one shared **Who presses B?** choice, shown as **Me / My friend**
 from each player's perspective. Either player can choose. The server accepts
@@ -47,8 +47,12 @@ clients retain their original instructions; they are not sent unsupported JSON.
 - Verified 117-file server package:
   `/srv/game-demo/releases/playdate-ready-23b0b2d/web/`; matching source and
   protocol build are in `../source`. The isolated staging process is stopped.
-  Both game/music manifests match the published baseline exactly. Deployment is
-  held while awaiting the user's live-room restart window, not a failed build.
+  Both game/music manifests match the preceding baseline exactly.
+- Live publication receipt: `/srv/game-demo/releases/playdate-ready-23b0b2d/deployment.json`.
+  Public Playdate and separate Gift health checks pass; existing settings are unchanged.
+- Public two-browser receipt: `TamaSuite-validation/playdate-lobby-20261017/
+  starter-public-live/browser.json`. All eight check groups pass against the
+  public service, with simulated UART. This is not physical-device qualification.
 
 Connection details now show the adapter VID:PID, timestamped byte directions and
 a local **Save connection log** action. Logs include no room credential and are
