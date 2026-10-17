@@ -232,10 +232,11 @@ export class GameRoom {
       instruction.textContent = advice ?? own?.reason ?? (!this.hooks.serial() ? "Connect your Paradise above."
         : !peer?.connected ? "Waiting for your friend to join. Keep your toy on the game menu."
         : !peer.adapter ? `${peer.nickname} is connecting their Paradise. Keep your toy on the game menu.`
+        : this.directResult === "Connecting" ? `Exchanging game messages with ${peer.nickname}. Waiting for both toys to confirm the connection…`
         : this.directResult === "Get ready" ? `Connected to ${peer.nickname}. The round is starting on your toys…`
         : this.directResult === "Playing" ? `Round ${this.directRound} · playing with ${peer.nickname}.`
         : this.directResult.endsWith("Finished") ? "Match finished. Both press B on the toy for a rematch, or C to return to the menu."
-        : `You and ${peer.nickname}: choose Versus on your toys. If already waiting, press C and choose Versus again. The match starts on the toys.`);
+        : `You and ${peer.nickname}: choose Versus on your toys. The match starts on the toys once both games connect.`);
       action.hidden = !own?.reason || !this.hooks.serial() || !!advice;
       action.textContent = "Reconnect toy"; action.disabled = false;
       el("group-unready").hidden = true;

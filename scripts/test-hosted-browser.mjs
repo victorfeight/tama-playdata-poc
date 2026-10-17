@@ -64,6 +64,7 @@ try {
   if (mode === 'direct') await guest.locator('#group-list button').filter({ hasText: 'Fern’s room' }).click();
   else { await guest.locator('#group-code-input').fill(code); await guest.locator('#group-join').click(); }
   await guest.locator('#group-current:not([hidden])').waitFor();
+  for (const page of pages) await page.waitForFunction(() => { const cards = [...document.querySelectorAll('#group-players li')]; return cards.length === 2 && cards.every(card => /waiting for Online|adapter connected/.test(card.textContent)); });
   // Explicit USB disconnect/reconnect must reattach the room, not leave a stale
   // 'connect toy' card behind a physically Connected label.
   await host.waitForFunction(() => document.querySelector('#group-players').textContent.includes('waiting for Online') || document.querySelector('#group-players').textContent.includes('adapter connected'));
