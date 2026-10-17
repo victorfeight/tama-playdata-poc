@@ -83,11 +83,18 @@ h3 { font-size: 1.25rem; font-weight: 500; margin: 0; }
 .member-list { margin: 24px 0; display: grid; gap: 10px; }
 .member { display: flex; gap: 10px; align-items: center; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #f3f7ed; }
 .member strong { font-size: .85rem; font-weight: 600; }
+.starter-choice { border: 0; border-top: 1px solid var(--line); margin: 0 0 18px; padding: 14px 0 0; min-width: 0; }
+.starter-choice legend { font-size: .85rem; font-weight: 650; padding: 0 8px 0 0; }
+.starter-options { display: flex; gap: 10px; }
+.starter-options button { flex: 1; min-width: 0; }
+.starter-options button[aria-pressed="true"] { background: #fcdb50; }
 .notice { margin: 16px 0 0; font-size: .85rem; line-height: 1.55; color: var(--ink); border-left: 3px solid #cfad32; padding-left: 10px; overflow-wrap: anywhere; }
 .notice:empty { display: none; }
 .next-step { padding: 25px 2px 5px; }
 .next-step h2 { font-size: 1.5rem; margin-bottom: 9px; }
 .next-step p:last-child { font-size: .9rem; line-height: 1.7; margin: 0; max-width: 62ch; color: var(--muted); }
+#next-instruction { font-size: .9rem; line-height: 1.7; margin: 0; max-width: 62ch; color: var(--muted); }
+#start-prompt { margin-top: 14px; }
 details { border-top: 1px solid var(--line); }
 .help-panel { margin-top: 34px; }
 summary { cursor: pointer; padding: 18px 0; font-size: .85rem; font-weight: 600; }

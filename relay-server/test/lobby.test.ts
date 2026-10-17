@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { WebSocket } from "ws";
 import { LobbyHub } from "../src/lobby";
@@ -16,9 +16,81 @@ class Socket extends EventEmitter {
 }
 let now = 0;
 let hub: LobbyHub;
-afterEach(() => hub?.close());
+afterEach(() => { hub?.close(); vi.useRealTimers(); });
 const setup = () => { now = 0; hub = new LobbyHub(() => now); };
 describe("Playdate lobby membership", () => {
+  it("coordinates fresh receiver confirmation without pretending to press B or detect a successful exchange", () => {
+    vi.useFakeTimers(); setup();
+    const a = hub.create("A", "private"), b = hub.join(a.code, "B");
+    const sa = new Socket(), sb = new Socket();
+    hub.attach(a.code, a.token, sa.ws); hub.attach(a.code, b.token, sb.ws);
+    const control = (s: Socket, value: object) => s.emit("message", Buffer.from(JSON.stringify(value)), false);
+    for (const s of [sa, sb]) control(s, { type: "adapter", connected: true, starterChoice: true });
+    const prompt = (s: Socket, action: string) => control(s, { type: "start-prompt", action });
+    prompt(sa, "prepare"); prompt(sb, "ready"); // Wrong roles.
+    expect(sa.snapshot().startPrompt).toBeUndefined();
+    prompt(sa, "ready"); // Not yet requested.
+    expect(sa.snapshot().startPrompt).toBeUndefined();
+    prompt(sb, "prepare");
+    expect(sa.snapshot().startPrompt).toBe("prepare");
+    prompt(sa, "ready");
+    expect(sb.snapshot()).toMatchObject({ startPrompt: "ready", readyForMs: 8000 });
+    expect(sb.messages.some(m => m.binary)).toBe(false);
+    now += 8000; vi.advanceTimersByTime(8000);
+    expect(sa.snapshot().startPrompt).toBe("prepare");
+    prompt(sa, "ready");
+    sb.emit("message", Buffer.from("PKT 2\r\n"), true);
+    expect(sa.snapshot().startPrompt).toBe("started");
+    expect(sa.messages.at(-1)).toEqual({ data: Buffer.from("PKT 2\r\n"), binary: true });
+    now += 8000; vi.advanceTimersByTime(8000);
+    expect(sa.snapshot().startPrompt).toBe("started");
+    prompt(sb, "prepare"); prompt(sa, "ready");
+    control(sb, { type: "starter", memberId: a.memberId });
+    expect(sa.snapshot().startPrompt).toBeUndefined();
+    prompt(sa, "prepare"); prompt(sb, "ready");
+    control(sb, { type: "adapter", connected: false, starterChoice: true });
+    expect(sa.snapshot().startPrompt).toBeUndefined();
+    prompt(sa, "prepare"); // No menu readiness while an adapter is disconnected.
+    expect(sa.snapshot().startPrompt).toBeUndefined();
+    control(sb, { type: "adapter", connected: true, starterChoice: true });
+    prompt(sa, "prepare"); prompt(sb, "ready");
+    sb.close(1000);
+    expect(sa.snapshot().startPrompt).toBeUndefined();
+  });
+  it("shares one starter, preserves reconnects, and never injects selection into UART", () => {
+    setup();
+    const a = hub.create("A", "private"), b = hub.join(a.code, "B");
+    const sa = new Socket(), sb = new Socket();
+    hub.attach(a.code, a.token, sa.ws); hub.attach(a.code, b.token, sb.ws);
+    const capable = (s: Socket) => s.emit("message", Buffer.from(JSON.stringify({ type: "adapter", connected: true, starterChoice: true })), false);
+    const choose = (s: Socket, memberId: string) => s.emit("message", Buffer.from(JSON.stringify({ type: "starter", memberId })), false);
+    expect(sa.snapshot().canChooseStarter).toBe(false);
+    capable(sa); capable(sb);
+    expect(sa.snapshot()).toMatchObject({ starterId: b.memberId, canChooseStarter: true });
+    choose(sb, a.memberId);
+    expect(sa.snapshot().starterId).toBe(a.memberId);
+    expect(sb.snapshot().starterId).toBe(a.memberId);
+    choose(sa, "another-room-member");
+    expect(sa.snapshot().starterId).toBe(a.memberId);
+    expect(sb.messages.some(m => m.binary)).toBe(false);
+    // Conflicting requests are serialized by the room, not independently flipped.
+    choose(sa, b.memberId); choose(sb, a.memberId);
+    expect(sa.snapshot().starterId).toBe(sb.snapshot().starterId);
+    sa.close(1000);
+    const rejoined = new Socket(); hub.attach(a.code, a.token, rejoined.ws); capable(rejoined);
+    expect(rejoined.snapshot()).toMatchObject({ starterId: a.memberId, canChooseStarter: true });
+    choose(sa, b.memberId); // Superseded socket cannot change the choice.
+    expect(rejoined.snapshot().starterId).toBe(a.memberId);
+    hub.leave(a.code, a.token);
+    expect(sb.snapshot().starterId).toBeUndefined();
+    const c = hub.join(a.code, "C"), sc = new Socket(); hub.attach(a.code, c.token, sc.ws); capable(sc);
+    expect(sc.snapshot().starterId).toBe(b.memberId);
+    // A cached browser without this UI must keep the historical instructions.
+    sc.emit("message", Buffer.from('{"type":"adapter","connected":false}'), false);
+    expect(sb.snapshot().canChooseStarter).toBe(false);
+    choose(sb, c.memberId);
+    expect(sb.snapshot().starterId).toBe(b.memberId);
+  });
   it("lets old desktop guests reconnect without disclosing or taking the browser host seat", () => {
     setup();
     const host = hub.create("Browser host", "private"), sh = new Socket();

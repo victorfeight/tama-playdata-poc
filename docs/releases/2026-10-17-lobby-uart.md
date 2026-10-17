@@ -1,4 +1,4 @@
-# Playdate lobby and browser UART release — staged, not published
+# Playdate lobby and browser UART release — published
 
 Application: `4c98c6584643d746980d197fc0305727685d1c54`, on GitHub main.
 SDK reconciliation/evidence: `7180096cf2d47ab399640964e796b4ad61fef5aa`, on GitHub main.
@@ -36,19 +36,26 @@ Server: `/srv/game-demo/releases/lobby-uart-4c98c65/web/`.
 Isolated source: `/srv/game-demo/releases/lobby-uart-4c98c65/source/`.
 Its separate database is `../staging.sqlite`; never copy it into production.
 
-## Publication pending
+## Published baseline
 
-Live `/srv/playdate` and public pages remain at `5c77ce3`. The same established
-port-3001 connection persisted across inspections. No live restart, nginx edit,
-proxy-env edit or static publication was performed, to preserve that session.
+Published `4c98c65` on 2026-10-17. The Playdate service and both public pages
+now use that application. Existing environment/database were preserved; reviewed
+trusted-proxy CIDRs are active. Gifts were not changed or restarted.
+The user explicitly requested publication; the one pre-existing waiting client
+was accounted for before the short restart. Server receipt:
+`/srv/game-demo/releases/lobby-uart-4c98c65/deployment.json`.
 
-When idle, follow `../GAME_DEMO_DEPLOYMENT.md`: configure the reviewed trusted
-proxy CIDRs, verify the clean package, fast-forward live source to the exact
-application commit, install the frozen lockfile and matching built protocol,
-restart only Playdate, and publish with an exclusive backup. Preserve `.env`
-and the live database. Verify live hashes, health and both activity flows.
-Pushing source or uploading staging files alone does not publish the pages.
+Public two-browser lobby and legacy compatibility tests passed, as did the
+public browser music/game flow with simulated UART and live two-player game
+transport probe. Evidence: `playdate-lobby-20261017/live-browser/browser.json`,
+`live-game-probe.json`, and `browser-uart-20261017/live-browser/browser.json`
+under `TamaSuite-validation`. These do not establish physical reliability.
+
+The subsequent physical Playdate attempt failed with 99 incoming/zero outgoing
+bytes; the user later reported success after reconnecting the dongle. Root cause
+is unresolved. The separate starter/ready UI and diagnostics are locally
+qualified, not published: see `../PLAYDATE_START_FLOW.md`.
 
 Physical browser/USB installation and two-human WAN gameplay remain open.
-The local game page supports music/game installation and solo play without
+The live game page supports music/game installation and solo play without
 another player. Online matches still require a second toy.

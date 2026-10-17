@@ -1,6 +1,7 @@
 # Browser music/game installation qualification — 2026-10-17
 
-Local source, not a deployment or physical-device receipt. The game remains
+Native qualification below is not a physical-device receipt. The application
+was published at `4c98c65`; see `releases/2026-10-17-lobby-uart.md`. The game remains
 two-player direct relay; hosted 2–16-player matches are a separate open phase.
 
 ## Tested path

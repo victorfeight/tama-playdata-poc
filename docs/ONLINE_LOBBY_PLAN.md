@@ -5,7 +5,7 @@ reconciliation and retained-helper reconstruction, is maintained in the SDK:
 `sdk/paradise/docs/ONLINE_UART_ROADMAP.md` (tama-paradise-tetris-versus worktree).
 
 Requested 2026-10-17. This supersedes the older invite-only/no-public-listing
-scope in the SDK external-host design. The live baseline at5c77ce3 is TWO-player
+scope in the SDK external-host design. The published baseline at `4c98c65` is TWO-player
 Games plus the repaired stock Playdate relay, reached directly from tools.
 
 ## Phases
@@ -62,7 +62,7 @@ display. Adapter connection must not be presented as proof that the stock toy
 is ready. The lobby must not change the firmware's tested host-waits/guest-B
 exchange ordering or introduce a browser start gate into the raw byte relay.
 
-Local implementation now exists in `relay-server/src/lobby.ts`,
+The published implementation exists in `relay-server/src/lobby.ts`,
 `web-client/src/lobby-client.ts`, and `web-client/src/ui/playdate-lobby.ts`.
 The existing Playdate page hosts the UI. Five membership tests and the real
 local two-browser flow pass, including simulated bidirectional UART, private
@@ -80,18 +80,25 @@ Reproduce with `scripts/test-playdate-lobby-browser.mjs PAGE_URL OUTPUT RELAY_UR
 
 The relay suite passes 32 tests before the additional unplug regression.
 Local browser/native music-install qualification is recorded in
-`BROWSER_UART_QUALIFICATION.md`. Neither lobby nor installer has been deployed.
+`BROWSER_UART_QUALIFICATION.md`. Both lobby and installer were published at `4c98c65`.
 Server Node 20 staging passes the full browser flow and the existing game
 transport probe; see `releases/2026-10-17-lobby-uart.md`. Physical two-player/WAN
-testing and idle-window publication remain open. The 2–16-player host
+testing remains open. The 2–16-player host
 endpoint is a non-exported draft; neither page silently enables that mode.
 
 The compatibility run exposed legacy reconnects sharing the ten-request default
 limit with creation. Joining and WebSocket reconnects now use the existing lobby
 allowance of 60/minute; creation keeps ten/minute. Inspection also found the
-live server has no trusted proxy configuration, so all nginx visitors were
+previous live server had no trusted proxy configuration, so all nginx visitors were
 counted as loopback. `RELAY_TRUSTED_PROXIES` now permits an explicit trusted CIDR
 chain (default loopback only). Tests cover visitor isolation, forged leftmost
 headers, untrusted direct callers, and creation limits after repeated joins.
-Deployment must configure the reviewed Cloudflare ranges; see
-`relay-proxy.env.example`. No live nginx or service settings changed in this audit.
+Production now uses the reviewed Cloudflare ranges; see
+`relay-proxy.env.example`. The service environment was updated during publication; nginx was unchanged.
+
+## Shared starter and ready prompts
+
+The subsequent switchable starter/ready flow and diagnostic logs are locally
+qualified but not yet live. See [the flow and incident record](PLAYDATE_START_FLOW.md).
+The successful retry after dongle reconnect does not establish a role restriction
+or fix the unresolved adapter/device recovery issue.

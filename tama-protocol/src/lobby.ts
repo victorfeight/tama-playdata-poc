@@ -17,6 +17,13 @@ export interface LobbySnapshot {
   visibility: "public" | "private";
   capacity: number;
   members: LobbyMember[];
+  /** Instruction assignment only: never gates or rewrites UART traffic. */
+  starterId?: string | undefined;
+  /** Absent/false for older servers and rooms containing desktop clients. */
+  canChooseStarter?: boolean;
+  /** Player-reported menu readiness, never detected device readiness. */
+  startPrompt?: "prepare" | "ready" | "started" | undefined;
+  readyForMs?: number | undefined;
 }
 
 export interface LobbyListing {

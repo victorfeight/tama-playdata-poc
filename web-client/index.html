@@ -19,6 +19,7 @@
           <section class="next-step" aria-live="polite" aria-atomic="true">
             <p class="eyebrow">Your next step</p><h2 id="next-heading">A Playdate, wherever you are</h2>
             <p id="next-instruction">Find someone in an open room, or create a room for a friend. Connect your adapter whenever you’re ready.</p>
+            <button id="start-prompt" type="button" hidden>Ask friend to get ready</button>
           </section>
         </div>
         <aside class="panel" aria-label="Playdate lobby">
@@ -40,6 +41,15 @@
             <h2 id="active-code" class="room-code" tabindex="-1"></h2>
             <button id="copy-room" class="secondary full-width" type="button" data-room-action>Copy invite link</button>
             <ul id="room-members" class="member-list" aria-label="Players"></ul>
+            <fieldset id="starter-choice" class="starter-choice" hidden>
+              <legend>Who presses B?</legend>
+              <div class="starter-options">
+                <button id="start-me" type="button" class="secondary" aria-pressed="false">Me</button>
+                <button id="start-friend" type="button" class="secondary" aria-pressed="false">My friend</button>
+              </div>
+              <p id="starter-summary" class="hint" role="status"></p>
+              <p class="hint">Choose before starting. To retry, reopen Playdate on both toys.</p>
+            </fieldset>
             <button id="reconnect-room" type="button" class="full-width" data-room-action hidden>Reconnect to room</button>
           </section>
           <p id="lobby-status" class="notice" role="status"></p>
@@ -56,7 +66,7 @@
           <li>Plug your UART adapter into your computer and attach it to your Paradise. Click <b>Connect adapter</b> and select its port.</li>
           <li>Choose a nickname. Join an open room, or create one and share its invite link. Rooms are private unless you choose to list them.</li>
           <li>Wait until both players are in the room with their adapters connected. Then, on both toys, open <b>Menu → Connection → Playdate</b>.</li>
-          <li>Follow your next-step instructions: one player waits on that screen, the other presses <b>B</b>. The screen can time out while waiting; reopen it on both toys if needed.</li>
+          <li>Choose who presses <b>B</b>. Your choice updates both pages: one player presses once, the other waits. The screen can time out while waiting; reopen it on both toys if needed.</li>
           <li>Your ghosts and friendship appear in the scene as the toys exchange data.</li>
         </ol>
         <p class="hint">Adapter status confirms the browser connection. It can’t tell which menu is open on your toy.</p>
@@ -71,6 +81,8 @@
               <div><dt>Role</dt><dd id="role">—</dd></div><div><dt>Activity</dt><dd id="activity">—</dd></div>
               <div><dt>Bytes in</dt><dd id="bytes-in">0</dd></div><div><dt>Bytes out</dt><dd id="bytes-out">0</dd></div>
             </dl>
+            <button id="save-log" type="button" class="secondary">Save connection log</button>
+            <p class="hint">Logs stay in this browser. Save both players’ logs after a failed attempt.</p>
           </div><pre id="byte-log" aria-label="Byte log"></pre>
         </div>
       </details>

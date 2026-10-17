@@ -15,6 +15,8 @@ export class PlaydateLobby {
   private busy = false;
   private listingPending = false;
   private peerSignature = "";
+  private readyUntil = 0;
+  private readyTimer: ReturnType<typeof setTimeout> | undefined;
   private rooms: LobbyListing[] = [];
   private readonly nickname = element<HTMLInputElement>("nickname");
   private readonly code = element<HTMLInputElement>("room-code");
@@ -46,6 +48,12 @@ export class PlaydateLobby {
       void this.refresh();
     }));
     element("reconnect-room").addEventListener("click", () => void this.run(() => this.connect()));
+    element("start-me").addEventListener("click", () => this.chooseStarter(true));
+    element("start-friend").addEventListener("click", () => this.chooseStarter(false));
+    element("start-prompt").addEventListener("click", () => {
+      if (!this.snapshot?.canChooseStarter || this.socket?.readyState !== WebSocket.OPEN) return;
+      this.socket.send(JSON.stringify({ type: "start-prompt", action: this.snapshot.starterId === this.entry?.memberId ? "prepare" : "ready" }));
+    });
     element("refresh-rooms").addEventListener("click", () => void this.refresh());
     element("copy-room").addEventListener("click", () => void this.run(async () => {
       if (!this.entry) return;
@@ -122,6 +130,10 @@ export class PlaydateLobby {
         try { update = JSON.parse(event.data); } catch { return; }
         if (update.type !== "lobby" || update.code !== this.entry?.code) return;
         this.snapshot = update;
+        clearTimeout(this.readyTimer);
+        const remaining = Math.max(0, Math.min(8000, update.readyForMs ?? 0));
+        this.readyUntil = performance.now() + remaining;
+        if (remaining) this.readyTimer = setTimeout(() => this.render(), remaining + 1);
         const peer = update.members.find(m => m.id !== this.entry?.memberId);
         const signature = peer ? `${peer.id}:${peer.connection}:${peer.connected}:${peer.adapterConnected}` : "";
         if (signature !== this.peerSignature) { this.peerSignature = signature; this.hooks.peerChanged(); }
@@ -152,7 +164,15 @@ export class PlaydateLobby {
   }
 
   private sendAdapter(): void {
-    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ type: "adapter", connected: this.adapter }));
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ type: "adapter", connected: this.adapter, starterChoice: true }));
+  }
+
+  private chooseStarter(me: boolean): void {
+    if (!this.snapshot?.canChooseStarter || this.socket?.readyState !== WebSocket.OPEN) return;
+    const member = this.snapshot.members.find(m => (m.id === this.entry?.memberId) === me);
+    if (member && member.id !== this.snapshot.starterId)
+      this.socket.send(JSON.stringify({ type: "starter", memberId: member.id }));
+    // Render only the server's shared assignment, never an optimistic local flip.
   }
 
   private clear(): void {
@@ -221,6 +241,12 @@ export class PlaydateLobby {
     element("room-visibility").textContent = this.snapshot?.visibility === "public" ? "Public room" : "Private room";
     const me = this.snapshot?.members.find(m => m.id === this.entry?.memberId);
     const peer = this.snapshot?.members.find(m => m.id !== this.entry?.memberId);
+    const iStart = this.snapshot?.starterId ? this.snapshot.starterId === me?.id : this.role === "guest";
+    element("starter-choice").hidden = !online || !this.snapshot?.canChooseStarter;
+    element("start-me").setAttribute("aria-pressed", String(iStart));
+    element("start-friend").setAttribute("aria-pressed", String(!iStart));
+    element("starter-summary").textContent = iStart ? "You press B. Your friend waits."
+      : `${peer?.nickname ?? "Your friend"} presses B. You wait.`;
     const members = element("room-members");
     members.replaceChildren(...[me, peer].map((member, index) => {
       const row = document.createElement("li"); row.className = "member";
@@ -236,6 +262,9 @@ export class PlaydateLobby {
       text.append(name, state); row.append(dot, text); return row;
     }));
     const heading = element("next-heading"), instruction = element("next-instruction");
+    const prompt = element<HTMLButtonElement>("start-prompt");
+    prompt.hidden = true;
+    prompt.disabled = false;
     if (!inRoom) {
       heading.textContent = "A Playdate, wherever you are";
       instruction.textContent = "Find someone in an open room, or create a room for a friend. Connect your adapter whenever you’re ready.";
@@ -250,12 +279,40 @@ export class PlaydateLobby {
       instruction.textContent = !this.adapter ? "Connect your UART adapter and attach it to your Paradise. Your friend’s connection appears above."
         : "Your adapter is connected. Waiting for your friend to connect theirs.";
     } else {
-      heading.textContent = "Open Playdate on both toys";
-      instruction.textContent = this.role === "host"
-        ? "On both toys: Menu → Connection → Playdate. Wait on that screen; your friend presses B to start. If it times out, both reopen Playdate and try again."
-        : "On both toys: Menu → Connection → Playdate. Once your friend is waiting on that screen, press B on your toy to start. If it times out, both reopen Playdate and try again.";
+      heading.textContent = iStart ? "Press B once" : "Open Playdate and wait";
+      instruction.textContent = iStart
+        ? "On both toys: Menu → Connection → Playdate. Once your friend is waiting on that screen, press B on your toy once. If it times out, both reopen Playdate and try again."
+        : "On both toys: Menu → Connection → Playdate. Stay on that screen without pressing B; your friend presses B to start. If it times out, both reopen Playdate and try again.";
       if (peer.adapterConnected === null)
         instruction.textContent = "First, ask your friend to start the adapter bridge in their app. " + instruction.textContent;
+      if (this.snapshot?.canChooseStarter) {
+        const ready = this.snapshot.startPrompt === "ready" && performance.now() < this.readyUntil;
+        const requested = !!this.snapshot.startPrompt;
+        prompt.hidden = ready || (!iStart && !requested);
+        prompt.textContent = iStart ? "Ask friend to get ready" : "I’m on Playdate screen";
+        prompt.disabled = iStart && this.snapshot.startPrompt === "prepare";
+        if (this.snapshot.startPrompt === "started") {
+          heading.textContent = "Follow your toy";
+          instruction.textContent = "Toy data has started. Follow the steps on your Paradise. If the connection fails, reopen Playdate on both toys and prepare another attempt.";
+          prompt.hidden = !iStart;
+          prompt.textContent = "Prepare another attempt";
+        } else if (ready) {
+          heading.textContent = iStart ? "Press B now" : "Wait—your friend is starting";
+          instruction.textContent = iStart
+            ? "Your friend says they’re on Playdate. Open Playdate on your toy and press B once."
+            : "Stay on Playdate without pressing B. We’ve told your friend to press B on their toy.";
+        } else if (requested) {
+          heading.textContent = iStart ? "Waiting for your friend’s ready" : "Go to Connection → Playdate and wait now";
+          instruction.textContent = iStart
+            ? "Your friend needs to freshly open Playdate and confirm here. Then we’ll tell you to press B."
+            : "Don’t press B. Once you’re on that screen, click “I’m on Playdate screen.” Your friend will be told to press B. If you were already waiting there, reopen Playdate first.";
+        } else {
+          heading.textContent = iStart ? "You’ll press B" : "You’ll wait on Playdate";
+          instruction.textContent = iStart
+            ? "Ask your friend to get ready. Once they confirm, we’ll tell you to press B on your toy."
+            : "Your friend will ask you to open Playdate. Stay on the normal menu until then.";
+        }
+      }
     }
   }
 }

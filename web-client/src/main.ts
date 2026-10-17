@@ -65,6 +65,18 @@ if (preview === "egg" || preview === "full") {
 }
 
 const exchange = new ExchangeScreen(must("byte-log"), must("ghost-summary"));
+exchange.pushSystem("Page opened; timestamped connection diagnostics v1. In = peer bytes written to adapter; out = adapter bytes sent to room. These are not proof the toy accepted them.");
+must("save-log").addEventListener("click", () => {
+  const summary = ["Paradise Link connection log", `Saved: ${new Date().toISOString()}`,
+    `Page: ${location.origin}${location.pathname}`, `App: ${import.meta.url}`,
+    `Browser: ${navigator.userAgent}`, `Room: ${lobby.roomCode ?? "none"}`,
+    `Role: ${lobby.role ?? "unknown"}`, `Adapter: ${serial?.info.label ?? "disconnected"}`,
+    `Bytes in: ${bytesInEl.textContent}; out: ${bytesOutEl.textContent}`, "", exchange.diagnosticLog()];
+  const url = URL.createObjectURL(new Blob([summary.join("\n") + "\n"], { type: "text/plain" }));
+  const link = document.createElement("a");
+  link.href = url; link.download = `playdate-${lobby.roomCode ?? "offline"}-${Date.now()}.txt`;
+  link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
 
 const outObserver = makeObserver("local", "out");
 const inObserver = makeObserver("peer", "in");
@@ -105,7 +117,7 @@ function makeObserver(source: "local" | "peer", label: "out" | "in"): TcpObserve
     },
     resync: (reason, total) => {
       console.warn(`[obs ${label}] resync #${total}`, reason);
-      exchange.pushSystem(`obs ${label} resync #${total}: ${reason}`);
+      exchange.pushSystem(`Preview decoder ${label} resync #${total}: ${reason}. Passive warning; forwarded bytes are unchanged.`);
     }
   });
 }
@@ -278,6 +290,7 @@ let lastByteAt = 0;
 const ACTIVITY_LIVE_MS = 2000;
 const lobby = new PlaydateLobby(new LobbyClient(config.relayUrl), {
   socket(next) {
+    exchange.pushSystem(next ? "Room socket connected; attaching serial bridge if adapter is open." : "Room socket detached.");
     bridge?.stop();
     bridge = undefined;
     socket = next;
@@ -288,7 +301,7 @@ const lobby = new PlaydateLobby(new LobbyClient(config.relayUrl), {
     // Defer the HUD until the constructor has finished assigning lobby.
     queueMicrotask(renderHud);
   },
-  peerChanged() { beginSession(); }
+  peerChanged() { exchange.pushSystem("Peer membership/adapter status changed; resetting preview only."); beginSession(); }
 });
 
 // USB unplug funnels into the same recovery path as a manual click.
@@ -313,6 +326,7 @@ must<HTMLButtonElement>("connect-serial").addEventListener("click", async () => 
     renderHud();
     showAppMessage("Choose your Paradise dongle.");
     serial = await connectDongle();
+    exchange.pushSystem(`Adapter opened: ${serial.info.label}; stock UART settings.`);
     showAppMessage("Dongle connected.");
     renderHud();
     await attachBridge();
@@ -346,6 +360,7 @@ async function attachBridge(): Promise<void> {
     }
   });
   bridge.start();
+  exchange.pushSystem(`Serial bridge attached to room ${lobby.roomCode ?? "unknown"}.`);
   showAppMessage("Adapter connected. Follow the Playdate steps beside the scene.");
 }
 
@@ -356,6 +371,7 @@ async function releaseSerial(): Promise<void> {
   bridge?.stop();
   bridge = undefined;
   serial = undefined;
+  exchange.pushSystem("Adapter released; bridge stopped.");
   beginSession();
   showAppMessage("Adapter disconnected. You can reconnect without leaving your room.");
   renderHud();
@@ -370,7 +386,7 @@ async function releaseSerial(): Promise<void> {
  * state-mutating handler so the HUD never lies.
  */
 function renderHud(): void {
-  portEl.textContent = serial ? "connected" : "disconnected";
+  portEl.textContent = serial ? `connected · ${serial.info.label}` : "disconnected";
   const isRoomLive = socket?.readyState === WebSocket.OPEN;
   roomEl.textContent = lobby.roomCode ?? "none";
   roleEl.textContent = isRoomLive ? lobby.role ?? "—" : "—";
@@ -406,6 +422,7 @@ function showAppMessage(message: string): void {
 
 function showAppError(error: unknown): void {
   const message = friendlyError(error);
+  exchange.pushSystem(`Error: ${message}`);
   must("connection-message").textContent = message;
   must("connection-message").hidden = false;
   exchange.showMessage(message);

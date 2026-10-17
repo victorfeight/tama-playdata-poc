@@ -1,15 +1,16 @@
 export class HexLog {
   private lines: string[] = [];
 
-  constructor(private readonly limit = 120) {}
+  constructor(private readonly limit = 1200, private readonly now = () => new Date()) {}
 
   push(direction: "in" | "out", data: Uint8Array): void {
-    this.lines.push(...formatLines(direction, data));
+    const at = this.now().toISOString();
+    this.lines.push(...formatLines(direction, data).map(line => `[${at}] ${line}`));
     if (this.lines.length > this.limit) this.lines.splice(0, this.lines.length - this.limit);
   }
 
   pushSystem(message: string): void {
-    this.lines.push(`   [sys] ${message}`);
+    this.lines.push(`[${this.now().toISOString()}] [sys] ${message}`);
     if (this.lines.length > this.limit) this.lines.splice(0, this.lines.length - this.limit);
   }
 

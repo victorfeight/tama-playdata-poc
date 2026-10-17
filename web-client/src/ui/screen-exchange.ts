@@ -22,6 +22,10 @@ export class ExchangeScreen {
     this.queueRender();
   }
 
+  diagnosticLog(): string {
+    return this.log.toString();
+  }
+
   // Each source (local / peer) keeps its own line so both ghosts stack once
   // they arrive, instead of the later one clobbering the earlier one.
   showGhost(ghost: GhostPreview): void {
