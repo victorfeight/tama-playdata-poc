@@ -1,6 +1,7 @@
 # Playdate starter and ready prompts — 2026-10-17
 
-Status: implemented and locally qualified; not yet published. The live baseline
+Status: committed/pushed at `23b0b2d`, locally and server-stage qualified;
+not yet published. The live baseline
 is `4c98c65`. Publishing this change requires a relay restart and closes rooms.
 
 The room has one shared **Who presses B?** choice, shown as **Me / My friend**
@@ -38,6 +39,16 @@ clients retain their original instructions; they are not sent unsupported JSON.
   service, simulated serial; switching from either side, preserved selection on
   reload, prompts/expiry, 390px layout, and both desktop interoperability directions.
 - Local receipt: `TamaSuite-validation/playdate-lobby-20261017/starter-ready-1/browser.json`.
+- Server Node 20.20.2 receipt: same parent directory,
+  `starter-server-stage/browser.json`. All eight browser check groups pass.
+  Relay/service suite: 35 tests pass; all three TypeScript builds and production
+  Vite build pass. A sandbox initially blocked the loopback test socket; the
+  permitted rerun passes all 35 tests.
+- Verified 117-file server package:
+  `/srv/game-demo/releases/playdate-ready-23b0b2d/web/`; matching source and
+  protocol build are in `../source`. The isolated staging process is stopped.
+  Both game/music manifests match the published baseline exactly. Deployment is
+  held while awaiting the user's live-room restart window, not a failed build.
 
 Connection details now show the adapter VID:PID, timestamped byte directions and
 a local **Save connection log** action. Logs include no room credential and are

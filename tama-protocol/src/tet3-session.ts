@@ -64,7 +64,7 @@ export class Tet3Session {
         if (packet.sequence || packet.round || packet.b || packet.c || !this.inFlight || packet.a !== this.sequence) continue;
         this.inFlight = false; this.queue.shift();
       } else {
-        if (!packet.sequence || packet.type < 3) continue;
+        if (!packet.sequence || packet.type < 3 || packet.type > 15) continue;
         if (packet.sequence <= this.received) { this.ack = packet.sequence; continue; }
         if (packet.sequence !== this.received + 1) continue;
         if (packet.type === 3 && !packet.round) this.ready = true;
