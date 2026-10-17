@@ -103,18 +103,18 @@ The subsequent switchable starter/ready flow and diagnostic logs are live at
 The successful retry after dongle reconnect does not establish a role restriction
 or fix the unresolved adapter/device recovery issue.
 
-## Local hosted implementation, 2026-10-17
+## Hosted implementation, published preview 2026-10-17
 
 The endpoint is now exported and the existing service has opt-in
-`HOSTED_GAMES=1` routes `/game-rooms` and `/game-ws/:code`. Public production is
-unchanged. `hosted-match.ts` owns pure round/target/result policy;
+`HOSTED_GAMES=1` routes `/game-rooms` and `/game-ws/:code`. Published preview:
+`599b807`. `hosted-match.ts` owns pure round/target/result policy;
 `game-rooms.ts` owns credentials and connection lifetimes;
 `games/hosted-room.ts` reuses `SerialBridge` and the separate Games page.
 No changes to stock Playdate UART forwarding are required.
 
 Both Blocks Online (mode 4) and the new Pocket Puzzle Online (`0x50500202`) use
 the host. Direct two-player modes remain separate. The new Puzzle BIN is required;
-the current live BIN does not have Online. Attack routing, tie settlement and
+the live package includes that candidate. Attack routing, tie settlement and
 forfeit rules are ours; the original private site's policies remain unknown.
 
 Implemented: private/public rooms, 2–16 distinct seat credentials, owner start,
@@ -137,9 +137,10 @@ parity remain unqualified. SDK reproduction and receipts:
 
 Build `tama-protocol` before starting the service: it imports compiled workspace
 exports. Test source imports alone cannot prove the running server is current.
-Before deployment, package the new BIN and stage on the server's Node version;
-nginx must route both new paths before `HOSTED_GAMES=1` is enabled. No live
-server, proxy or auto-update feed was changed by this implementation.
+The packaged new BIN and both games passed server Node 20.20.2 staging; nginx
+now routes both new paths with `HOSTED_GAMES=1`. Public match/rematch browser
+checks pass for both games. Installer auto-update feeds were not changed.
+See [the release receipt](releases/2026-10-17-hosted-outcomes.md).
 
 ## Following hosted-match qualification
 

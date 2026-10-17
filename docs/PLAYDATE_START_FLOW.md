@@ -61,7 +61,7 @@ are passive; they do not establish corruption of the forwarded bytes.
 
 ## Hardware incident: unresolved root cause
 
-### Integrated outcome recovery and timed cue (local, 2026-10-17)
+### Integrated outcome recovery and timed cue (published, 2026-10-17)
 
 The isolated outcome work `06b36c4` is merged alongside hosted games. Its
 passive observer returns both capable browser clients to preparation only for
@@ -82,8 +82,10 @@ No animation, extra acknowledgement, synthetic B or new room control is added.
 
 Local integrated checks: 51 relay tests and 10 real two-browser check groups
 with simulated UART. Evidence root: `TamaSuite-validation/hosted-mode-audit-20261017/`,
-`playdate-integrated/browser.json`, `relay-integrated.log`. Public deployment
-and physical two-player checks must be recorded separately after staging.
+`playdate-integrated/browser.json`, `relay-integrated.log`. The same ten browser
+groups pass on server staging and publicly after publication at `599b807`;
+see [the release receipt](releases/2026-10-17-hosted-outcomes.md).
+Physical two-player qualification remains separate and pending.
 
 The user reported a failed live attempt with 99 bytes in and zero bytes out on
 the guest, matching repeated host `PKT 2` and cancellation. The guest received
