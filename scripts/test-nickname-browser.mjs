@@ -6,7 +6,10 @@ try {
   for (const game of [false, true]) {
     const page = await browser.newPage(); let posts = 0;
     if (game) await page.addInitScript(() => Object.defineProperty(navigator, 'serial', { value: {
-      requestPort: async () => ({ open: async () => {}, close: async () => {}, getInfo: () => ({ usbVendorId: 0x1a86, usbProductId: 0x7523 }) })
+      requestPort: async () => ({
+        async open() { this.readable = new ReadableStream(); this.writable = new WritableStream(); },
+        close: async () => {}, getInfo: () => ({ usbVendorId: 0x1a86, usbProductId: 0x7523 })
+      })
     } }));
     await page.route('**/*', async route => {
       const request = route.request(), path = new URL(request.url()).pathname;
