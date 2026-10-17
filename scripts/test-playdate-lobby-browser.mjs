@@ -86,8 +86,10 @@ try {
   await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Waiting for your friend');
   await host.locator('#leave-room').click(); await host.locator('#lobby-entry:not([hidden])').waitFor();
   await host.locator('#public-room').uncheck(); await host.locator('#create-room').click();
+  await host.locator('#room-panel:not([hidden])').waitFor();
   await host.waitForFunction(() => document.querySelector('#room-visibility').textContent === 'Private room');
   const privateCode = await host.locator('#active-code').textContent();
+  assert.match(privateCode, /^[A-Z0-9]{6}$/);
   await guest.locator('#refresh-rooms').click();
   await guest.locator('#refresh-rooms:not([disabled])').waitFor();
   assert.equal(await guest.getByRole('button', { name: 'Join Fern’s room' }).count(), 0);
@@ -109,7 +111,7 @@ try {
   await host.evaluate(() => window.enqueueUart([91, 0, 255]));
   await until(() => oldGuest.messages.some(m => Array.isArray(m) && m.join() === '91,0,255'));
   oldGuest.socket.send(Buffer.from([92, 1, 254]));
-  await host.waitForFunction(() => window.uartWrites.some(b => b.join() === '92,1,254'));
+  await host.waitForFunction(() => window.uartWrites?.some(b => b.join() === '92,1,254'));
   assert(oldGuest.messages.filter(m => typeof m === 'string').every(m => m === 'peer connected' || m === 'peer disconnected'));
   oldGuest.socket.close();
   await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Waiting for your friend');
@@ -124,7 +126,7 @@ try {
   await until(() => oldHost.messages.includes('peer connected'));
   assert((await guest.locator('#next-instruction').textContent()).includes('press B on your toy'));
   oldHost.socket.send(Buffer.from([93, 2, 253]));
-  await guest.waitForFunction(() => window.uartWrites.some(b => b.join() === '93,2,253'));
+  await guest.waitForFunction(() => window.uartWrites?.some(b => b.join() === '93,2,253'));
   await guest.evaluate(() => window.enqueueUart([94, 3, 252]));
   await until(() => oldHost.messages.some(m => Array.isArray(m) && m.join() === '94,3,252'));
   oldHost.socket.close();
@@ -133,7 +135,7 @@ try {
   const resumedHost = await desktop(oldRoom.code, oldRoom.token, 'a');
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Open Playdate on both toys');
   resumedHost.socket.send(Buffer.from([95, 4, 251]));
-  await guest.waitForFunction(() => window.uartWrites.some(b => b.join() === '95,4,251'));
+  await guest.waitForFunction(() => window.uartWrites?.some(b => b.join() === '95,4,251'));
   await guest.reload();
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’re both here');
   await guest.locator('#connect-serial').click();

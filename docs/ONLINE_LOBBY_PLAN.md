@@ -81,7 +81,9 @@ Reproduce with `scripts/test-playdate-lobby-browser.mjs PAGE_URL OUTPUT RELAY_UR
 The relay suite passes 32 tests before the additional unplug regression.
 Local browser/native music-install qualification is recorded in
 `BROWSER_UART_QUALIFICATION.md`. Neither lobby nor installer has been deployed.
-Staging and physical two-player/WAN testing remain open. The 2–16-player host
+Server Node 20 staging passes the full browser flow and the existing game
+transport probe; see `releases/2026-10-17-lobby-uart.md`. Physical two-player/WAN
+testing and idle-window publication remain open. The 2–16-player host
 endpoint is a non-exported draft; neither page silently enables that mode.
 
 The compatibility run exposed legacy reconnects sharing the ten-request default
