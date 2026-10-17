@@ -281,8 +281,8 @@ export class PlaydateLobby {
     } else {
       heading.textContent = iStart ? "Press B once" : "Open Playdate and wait";
       instruction.textContent = iStart
-        ? "On both toys: Menu → Connection → Playdate. Once your friend is waiting on that screen, press B on your toy once. If it times out, both reopen Playdate and try again."
-        : "On both toys: Menu → Connection → Playdate. Stay on that screen without pressing B; your friend presses B to start. If it times out, both reopen Playdate and try again.";
+        ? "On both toys: Menu → Connection → Playdate. Once your friend is waiting on that screen, press B on your toy once. "
+        : "On both toys: Menu → Connection → Playdate. Stay on that screen without pressing B; your friend presses B to start. ";
       if (peer.adapterConnected === null)
         instruction.textContent = "First, ask your friend to start the adapter bridge in their app. " + instruction.textContent;
       if (this.snapshot?.canChooseStarter) {
@@ -293,9 +293,13 @@ export class PlaydateLobby {
         prompt.disabled = iStart && this.snapshot.startPrompt === "prepare";
         if (this.snapshot.startPrompt === "started") {
           heading.textContent = "Follow your toy";
-          instruction.textContent = "Toy data has started. Follow the steps on your Paradise. If the connection fails, reopen Playdate on both toys and prepare another attempt.";
-          prompt.hidden = !iStart;
-          prompt.textContent = "Prepare another attempt";
+          instruction.textContent = "Toy data has started. Follow the steps on your Paradise.";
+          prompt.hidden = true;
+        } else if (this.snapshot.outcome === "interrupted") {
+          heading.textContent = "The exchange stopped";
+          instruction.textContent = iStart
+            ? "A toy cancelled the transfer. Reopen Playdate on both toys; your friend will confirm when ready."
+            : "A toy cancelled the transfer. Reopen Playdate, then confirm here. Don’t press B.";
         } else if (ready) {
           heading.textContent = iStart ? "Press B now" : "Wait—your friend is starting";
           instruction.textContent = iStart

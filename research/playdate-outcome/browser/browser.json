@@ -1,0 +1,15 @@
+{
+  "passed": true,
+  "checks": [
+    "Existing Playdate entry, private default, nickname validation, public discovery, text-safe player names",
+    "Two real HTTP/WebSocket room clients; binary UART in both directions; room JSON never written to serial; role-specific instructions",
+    "Either player chooses the starter; both pages agree; selection survives reload; selection never writes to UART",
+    "Saved timestamped local diagnostics include adapter identity and both byte directions, without room credentials",
+    "Framed CAN returns both pages to preparation; normal exchange hides retry advice/buttons; receiver must freshly confirm",
+    "Ready request and receiver confirmation update both pages; readiness expires; real toy bytes end the prompt without claiming success; controls never generate UART",
+    "390px layout; disconnect without leaving; reload/rejoin; explicit leave frees seat; private code join",
+    "Browser host with legacy desktop guest: idempotent guest ticket, presence-only text, unchanged binary UART, explicit unknown adapter state",
+    "Legacy desktop host with browser guest: fallback, bidirectional UART, host reconnect, browser reload and leave; no false adapter-ready claims"
+  ],
+  "scope": "Actual local lobby service and browser pages; simulated UART streams, not hardware or native firmware"
+}
