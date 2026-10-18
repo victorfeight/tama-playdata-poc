@@ -62,6 +62,13 @@ export class Scene {
     const centerX = slot.x + slot.w / 2;
     const centerY = slot.y + slot.h / 2;
 
+    // Anchor panels to offer coordinates; the decorative backdrop has no boxes.
+    ctx.fillStyle = "rgba(255, 253, 242, 0.94)";
+    ctx.strokeStyle = side === "local" ? "#8dc1d7" : "#a6c28b";
+    ctx.lineWidth = 2;
+    roundRect(ctx, centerX - 92, 194, 184, 196, 12);
+    ctx.fill(); ctx.stroke();
+
     if (state.image?.complete && state.image.naturalWidth > 0) {
       const age = performance.now() - (state.seenAt ?? 0);
       const pop = age < 520 ? easeOutBack(Math.min(1, age / 520)) : 1;
