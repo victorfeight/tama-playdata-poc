@@ -126,7 +126,7 @@ retains old hashed assets and replaces HTML last. Packaging does not deploy.
 
 Read-only SSH audit on2026-10-17: both services active and both loopback health
 checks passed. Playdate backend was `50f3a43`; Gift backend was `669d0f0` with a
-clean checkout. Gift unit `tama-gift-relay.service` currently launches
+clean checkout. Before activation, Gift unit `tama-gift-relay.service` launched
 `/srv/tama-gifts-poc/relay-server/node_modules/.bin/tsx` against that directory's
 `src/index.ts`; WorkingDirectory is `/srv/tama-gifts-poc/relay-server`.
 Its static root remains `/srv/tama-gifts-poc/web-client/dist`.
@@ -147,3 +147,26 @@ session endpoints. Playdate/Games need no restart for this Gift deployment.
 Do not simply pull the historical Gift repository and expect this shared code,
 or publish the new frontend against the old backend: they need to move together.
 No remote deployment was performed during the implementation checkpoint.
+
+### Activated 2026-10-18 UTC (October 17 Pacific)
+
+Release `a2a0fc4bc1b50f041f4948d31767b5eaf143959b` is live at
+`https://trade.bbamorachi.us/`, pushed to the canonical repository's `main`.
+Gift now runs from `/srv/paradise-link-gift/a2a0fc4/relay-server`, with the
+original database and service restrictions preserved. Its systemd drop-in is
+`/etc/systemd/system/tama-gift-relay.service.d/20-shared-gift.conf`; the additional
+runtime file sets Gift activity, disables hosted games and configures the
+reviewed trusted proxies. The static root remains unchanged.
+
+The staging service passed real HTTP/WebSocket duplex, readiness and legacy
+Gift checks, plus 23 server regressions. No Gift connections were active at the
+switch. The public site then passed both browser suites: shared lobby/reconnect/
+legacy flows and encrypted Gift offer previews. These used simulated UART, not
+physical toys. All eight public JS/CSS asset hashes and the origin HTML match
+the release; Cloudflare injects its own challenge markup into public HTML.
+
+Playdate/Games were not restarted. Previous Gift service/config/database/web
+files are retained under `/srv/paradise-link-gift/before-a2a0fc4`; the publisher
+also retained its exclusive web backup. The temporary staging service is stopped.
+Receipt: `docs/evidence/gift-deployment-20261017.json`. A complete physical Gift
+trade and saved inventories on both toys remain to be tested.
