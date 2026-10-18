@@ -9,7 +9,7 @@ import { getItemCatalogEntry } from "./gift/item-catalog";
 
 mountStockShell("gift");
 const canvas = must<HTMLCanvasElement>("link-canvas");
-const scene = new Scene(new Drawer(canvas, canvas.getContext("2d")!, "/sprites/tama_trade.png"));
+const scene = new Scene(new Drawer(canvas, canvas.getContext("2d")!, "/sprites/tama_trade.png?v=f31529fd18fd"));
 scene.mount();
 const exchange = new ExchangeScreen(must("byte-log"), must("ghost-summary"));
 const offers = new Map<string, number>();
