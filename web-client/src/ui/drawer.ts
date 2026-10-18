@@ -9,7 +9,8 @@ export class Drawer {
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly ctx = canvas.getContext("2d") as CanvasRenderingContext2D,
-    backdrop = "/sprites/unexists-banner.png"
+    backdrop = "/sprites/unexists-banner.png",
+    private readonly insetFrame = true
   ) {
     this.ctx.imageSmoothingEnabled = false;
     this.backdrop.src = backdrop;
@@ -41,12 +42,12 @@ export class Drawer {
   draw(deltaMs: number): void {
     const { width, height } = this.canvas;
     this.ctx.clearRect(0, 0, width, height);
-    drawImageBackdrop(this.ctx, this.backdrop, width, height);
+    drawImageBackdrop(this.ctx, this.backdrop, width, height, this.insetFrame);
     for (const object of [...this.objects].sort((a, b) => a.z - b.z)) object.draw(this.ctx, deltaMs);
   }
 }
 
-function drawImageBackdrop(ctx: CanvasRenderingContext2D, image: HTMLImageElement, width: number, height: number): void {
+function drawImageBackdrop(ctx: CanvasRenderingContext2D, image: HTMLImageElement, width: number, height: number, insetFrame: boolean): void {
   ctx.fillStyle = "#f5ebda";
   ctx.fillRect(0, 0, width, height);
 
@@ -64,7 +65,9 @@ function drawImageBackdrop(ctx: CanvasRenderingContext2D, image: HTMLImageElemen
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, width, height);
 
-  ctx.strokeStyle = "#1f2520";
-  ctx.lineWidth = 5;
-  ctx.strokeRect(14, 14, width - 28, height - 28);
+  if (insetFrame) {
+    ctx.strokeStyle = "#1f2520";
+    ctx.lineWidth = 5;
+    ctx.strokeRect(14, 14, width - 28, height - 28);
+  }
 }
