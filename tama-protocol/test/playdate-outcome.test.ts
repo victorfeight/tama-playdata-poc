@@ -16,6 +16,17 @@ async function packet(o: PlaydateOutcomeObserver, payload: number[], side: Playd
   await o.settled();
 }
 describe("passive Playdate outcome", () => {
+  it("shares abort detection with Gifts without inventing Playdate results or saved trades", async () => {
+    const changes: string[] = [], o = new PlaydateOutcomeObserver(s => changes.push(s), "gift");
+    await packet(o, [1, 0, 0, 0], 0, 2); // Gift version
+    await packet(o, [0x8b, 0x13], 0, 2); // Local item
+    await packet(o, [0x8c, 0x13], 1, 2); // Peer item
+    await packet(o, [0, 0, 1, 0], 0, 1); // Even unrelated type1 cannot offer breeding.
+    o.push(1, text("BREED 1\r\nSYNC 2\r\nCAN\r\n"));
+    await o.settled(); expect(changes).toEqual([]);
+    o.push(0, text("PKT 2\r\n")); o.push(1, text("CAN\r\n"));
+    await o.settled(); expect(changes).toEqual(["interrupted"]);
+  });
   it("recognizes the native unanswered-PKT sequence, including single-byte fragmentation", async () => {
     const changes: string[] = [], o = new PlaydateOutcomeObserver(s => changes.push(s));
     for (const b of text("PKT 2\r\nPKT 2\r\nPKT 2\r\nPKT 2\r\n")) o.push(0, new Uint8Array([b]));

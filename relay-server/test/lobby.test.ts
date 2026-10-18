@@ -17,8 +17,8 @@ class Socket extends EventEmitter {
 let now = 0;
 let hub: LobbyHub;
 afterEach(() => { hub?.close(); vi.useRealTimers(); });
-const setup = () => { now = 0; hub = new LobbyHub(() => now); };
-describe("Playdate lobby membership", () => {
+describe.each(["playdate", "gift"] as const)("%s lobby membership", activity => {
+  const setup = () => { now = 0; hub = new LobbyHub(() => now, () => false, activity); };
   it("coordinates fresh receiver confirmation without pretending to press B or detect a successful exchange", () => {
     vi.useFakeTimers(); setup();
     const a = hub.create("A", "private"), b = hub.join(a.code, "B");
@@ -96,6 +96,7 @@ describe("Playdate lobby membership", () => {
     hub.attach(a.code, a.token, sa.ws); hub.attach(a.code, b.token, sb.ws);
     const capable = (s: Socket) => s.emit("message", Buffer.from(JSON.stringify({ type: "adapter", connected: true, starterChoice: true })), false);
     const choose = (s: Socket, memberId: string) => s.emit("message", Buffer.from(JSON.stringify({ type: "starter", memberId })), false);
+    expect(sa.snapshot().activity).toBe(activity);
     expect(sa.snapshot().canChooseStarter).toBe(false);
     capable(sa); capable(sb);
     expect(sa.snapshot()).toMatchObject({ starterId: b.memberId, canChooseStarter: true });

@@ -8,10 +8,11 @@ export class Drawer {
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
-    private readonly ctx = canvas.getContext("2d") as CanvasRenderingContext2D
+    private readonly ctx = canvas.getContext("2d") as CanvasRenderingContext2D,
+    backdrop = "/sprites/unexists-banner.png"
   ) {
     this.ctx.imageSmoothingEnabled = false;
-    this.backdrop.src = "/sprites/unexists-banner.png";
+    this.backdrop.src = backdrop;
   }
 
   add(object: Object2d): Object2d {

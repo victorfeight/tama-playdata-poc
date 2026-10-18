@@ -133,3 +133,5 @@ footer { padding-top: 20px; color: var(--muted); font-size: .7rem; text-align: c
 @media (prefers-reduced-motion: reduce) {
   button:active { transform: none; }
 }
+
+.invite-actions { display: grid; gap: .55rem; }

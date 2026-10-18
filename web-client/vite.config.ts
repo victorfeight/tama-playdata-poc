@@ -6,6 +6,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         playdate: fileURLToPath(new URL("./index.html", import.meta.url)),
+        gifts: fileURLToPath(new URL("./gifts/index.html", import.meta.url)),
         games: fileURLToPath(new URL("./games/index.html", import.meta.url))
       }
     }

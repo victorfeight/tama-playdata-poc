@@ -6,10 +6,13 @@ export interface Config {
   sessionTtlMs: number;
   trustedProxyCidrs?: string[];
   hostedGames?: boolean;
+  stockActivity?: "playdate" | "gift";
 }
 
 export function readConfig(env = process.env): Config {
+  if (env.STOCK_ACTIVITY && !["playdate", "gift"].includes(env.STOCK_ACTIVITY)) throw new Error("Invalid STOCK_ACTIVITY");
   return {
+    stockActivity: env.STOCK_ACTIVITY === "gift" ? "gift" : "playdate",
     hostedGames: env.HOSTED_GAMES === "1",
     port: Number(env.PORT ?? 3001),
     dbPath: path.resolve(process.cwd(), env.DB_PATH ?? "./data/sessions.db"),

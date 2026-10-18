@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { WebSocket, type RawData } from "ws";
 import { PlaydateOutcomeObserver, normalizeNickname, nicknameProblem } from "@tama-breed-poc/tama-protocol";
-import type { LobbyEntry, LobbyListing, LobbyMember, LobbySnapshot, PlaydateOutcome } from "@tama-breed-poc/tama-protocol";
+import type { LobbyEntry, LobbyListing, LobbyMember, LobbySnapshot, PlaydateOutcome, StockActivity } from "@tama-breed-poc/tama-protocol";
 
 interface Member extends LobbyMember {
   token: string;
@@ -37,7 +37,8 @@ export class LobbyHub {
   private readonly cleanup: ReturnType<typeof setInterval>;
 
   constructor(private readonly now: () => number = Date.now,
-    private readonly codeInUse: (code: string) => boolean = () => false) {
+    private readonly codeInUse: (code: string) => boolean = () => false,
+    private readonly activity: StockActivity = "playdate") {
     this.cleanup = setInterval(() => this.sweep(), 10_000);
     this.cleanup.unref();
   }
@@ -74,7 +75,7 @@ export class LobbyHub {
     const guest = room.members.find(m => m.slot === 1);
     if (guest && !guest.legacy) throw new LobbyError(409, "That room is full.");
     const token = guest?.token ?? this.add(room, "Desktop friend", true).token;
-    return { token, app: "playdate-web" };
+    return { token, app: this.activity === "gift" ? "trade-web" : "playdate-web" };
   }
 
   attachLegacy(code: string, role: string, token: string | undefined, ws: WebSocket): void {
@@ -178,7 +179,7 @@ export class LobbyHub {
                 room.startPrompt = "prepare";
               }
               this.broadcast(room);
-            });
+            }, this.activity);
             room.observation?.stop();
             room.observation = observation; room.outcome = "exchanging";
             room.readyUntil = this.now() + 8000;
@@ -244,7 +245,7 @@ export class LobbyHub {
     else if (room.members.some(m => m.legacy) || !room.members.some(m => m.id === room.starterId))
       room.starterId = room.members.find(m => m.slot === 1)?.id;
     const snapshot: LobbySnapshot = {
-      type: "lobby", code: room.code, activity: "playdate", visibility: room.visibility, capacity: 2,
+      type: "lobby", code: room.code, activity: this.activity, visibility: room.visibility, capacity: 2,
       starterId: room.starterId, canChooseStarter: this.canChooseStarter(room),
       startPrompt: room.startPrompt, outcome: room.outcome,
       readyForMs: room.readyUntil === undefined ? undefined : Math.max(0, room.readyUntil - this.now()),

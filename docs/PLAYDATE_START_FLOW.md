@@ -32,7 +32,7 @@ clients retain their original instructions; they are not sent unsupported JSON.
 
 - `tama-protocol/src/lobby.ts`: shared metadata contract.
 - `relay-server/src/lobby.ts`: assignment, role-checked prompts, eight-second expiry.
-- `web-client/src/ui/playdate-lobby.ts`: shared-state rendering and contextual actions.
+- `web-client/src/ui/stock-lobby.ts`: shared-state rendering and contextual actions.
 - `relay-server/test/lobby.test.ts`: assignment/reconnect, invalid/stale requests,
   capability fallback, confirmation ordering, expiry and unchanged UART bytes.
 - `scripts/test-playdate-lobby-browser.mjs`: two actual browsers and HTTP/WS

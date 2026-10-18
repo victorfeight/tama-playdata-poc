@@ -1,0 +1,82 @@
+{
+  "date": "2026-10-17",
+  "unit_tests": {
+    "shared_lobby_serial": 28,
+    "protocol_nickname_usb": 33
+  },
+  "browser": {
+    "playdate": {
+      "passed": true,
+      "activity": "playdate",
+      "checks": [
+        "Existing Playdate entry, private default, nickname validation, public discovery, text-safe player names",
+        "Two real HTTP/WebSocket room clients; binary UART in both directions; room JSON never written to serial; role-specific instructions",
+        "Either player chooses the starter; both pages agree; selection survives reload; selection never writes to UART",
+        "Saved timestamped local diagnostics include adapter identity and both byte directions, without room credentials",
+        "Framed CAN returns both pages to preparation; normal exchange hides retry advice/buttons; receiver must freshly confirm",
+        "Starter-only readiness countdown shrinks, expires without claiming failure, and disappears on toy traffic",
+        "Ready request and receiver confirmation update both pages; readiness expires; real toy bytes end the prompt without claiming success; controls never generate UART",
+        "390px layout; disconnect without leaving; reload/rejoin; explicit leave frees seat; private code join",
+        "Browser host with legacy desktop guest: idempotent guest ticket, presence-only text, unchanged binary UART, explicit unknown adapter state",
+        "Legacy desktop host with browser guest: fallback, bidirectional UART, host reconnect, browser reload and leave; no false adapter-ready claims"
+      ],
+      "scope": "Actual local lobby service and browser pages; simulated UART streams, not hardware or native firmware"
+    },
+    "gift": {
+      "passed": true,
+      "activity": "gift",
+      "checks": [
+        "Separate code/invite copy preserves the current activity page",
+        "Existing Playdate entry, private default, nickname validation, public discovery, text-safe player names",
+        "Two real HTTP/WebSocket room clients; binary UART in both directions; room JSON never written to serial; role-specific instructions",
+        "Either player chooses the starter; both pages agree; selection survives reload; selection never writes to UART",
+        "Saved timestamped local diagnostics include adapter identity and both byte directions, without room credentials",
+        "Framed CAN returns both pages to preparation; normal exchange hides retry advice/buttons; receiver must freshly confirm",
+        "Starter-only readiness countdown shrinks, expires without claiming failure, and disappears on toy traffic",
+        "Ready request and receiver confirmation update both pages; readiness expires; real toy bytes end the prompt without claiming success; controls never generate UART",
+        "390px layout; disconnect without leaving; reload/rejoin; explicit leave frees seat; private code join",
+        "Browser host with legacy desktop guest: idempotent guest ticket, presence-only text, unchanged binary UART, explicit unknown adapter state",
+        "Legacy desktop host with browser guest: fallback, bidirectional UART, host reconnect, browser reload and leave; no false adapter-ready claims"
+      ],
+      "scope": "Actual local lobby service and browser pages; simulated UART streams, not hardware or native firmware"
+    },
+    "gift_items": {
+      "passed": true,
+      "checks": [
+        "Raw bytes do not invent plaintext offers",
+        "Fragmented encrypted type2 packets show both correct items",
+        "No saved/completed claims",
+        "Duplicate offer remains stable",
+        "Peer adapter change clears offers without leaving room"
+      ],
+      "scope": "Two browsers and local relay; simulated UART, not a completed native trade"
+    }
+  },
+  "scope": "Local browser/relay with mocked serial; physical complete Gift trade remains pending",
+  "live_audit": {
+    "playdate_backend": "50f3a43",
+    "gift_backend": "669d0f0",
+    "both_services": "active",
+    "both_health": "ok",
+    "modified": false
+  },
+  "legacy_local_fixes": {
+    "patch_sha256": "a1da96544123b34d5d226630515095c272e1038de8abd011118fce0c4807b797",
+    "paths": [
+      "relay-server/src/relay.ts",
+      "tama-protocol/src/transport-webserial.ts",
+      "web-client/src/serial-bridge.ts"
+    ],
+    "resolved_by": "Maintained shared bridge/reader, binary-only relay and replaced-socket guard; regression suites passed. Original checkout preserved."
+  },
+  "sources": {
+    "relay-server/src/lobby.ts": "28d905c72ba69b42ee301a3aa35b009739507ad400dd5df6f15a4f99b1769d81",
+    "web-client/src/ui/stock-lobby.ts": "59960373d18deb17527a32d31b794640d8ae1861e937583e86e2e965b9797997",
+    "web-client/src/stock-link.ts": "cd4bb13789644ff9eb3d92e12fbd23535248eed8f9f87cc68b1bf48a544d6c69",
+    "web-client/src/gifts.ts": "c2c61c798c107025a3cff701d7a66d9ff31e2937eaf10a1e81c5b062df6e7a8c",
+    "web-client/src/gift/scene.ts": "edd309c48b6df39a6ae1f7e04dacac6248103398666c4bfaddcc982e2c163cb9",
+    "tama-protocol/src/playdate-outcome.ts": "ee8326c1bb2d3e572e965884b0e18c8c9697a8dff28d828fa4259ff78f62aedc",
+    "scripts/test-gift-preview-browser.mjs": "10d01fc4bae15598d4a6ef251cf6d269a71af5f6668f180b6696b23ac5242128",
+    "scripts/test-playdate-lobby-browser.mjs": "99db4e6b97e57fdd966d1d8fe5bad73e5037c3c65e71e854a9ef8ed97a99c7dd"
+  }
+}

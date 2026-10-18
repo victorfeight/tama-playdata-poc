@@ -93,7 +93,7 @@ if (removeArg) {
 if (fullWeb && !streamArg) throw new Error("Full web releases require --music-stream so browser music installation is included");
 if (fullWeb && !removeArg) throw new Error("Full web releases require --music-remover so installed music can be removed");
 await mkdir(destination); // Exclusive destination: do not overwrite another release.
-for (const name of fullWeb ? ["games", "assets", "sprites", "index.html"] : ["games", "assets"])
+for (const name of fullWeb ? ["games", "gifts", "assets", "sprites", "index.html"] : ["games", "assets"])
   await cp(path.join(dist, name), path.join(destination, name), { recursive: true });
 for (const payload of payloads) {
   await writeFile(path.join(destination, "games", payload.manifest.file), payload.bytes);

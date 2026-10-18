@@ -1,6 +1,8 @@
 import type { PlaydateOutcome } from "./playdate-outcome";
 
 /** Lobby metadata is JSON control traffic; it must never reach a toy's UART. */
+export type StockActivity = "playdate" | "gift";
+
 export interface LobbyMember {
   id: string;
   nickname: string;
@@ -15,7 +17,7 @@ export interface LobbyMember {
 export interface LobbySnapshot {
   type: "lobby";
   code: string;
-  activity: "playdate";
+  activity: StockActivity;
   visibility: "public" | "private";
   capacity: number;
   members: LobbyMember[];

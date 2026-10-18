@@ -17,7 +17,7 @@ export async function buildServer(config: Config) {
   const db = openDb(config.dbPath);
   const sessions = new SessionStore(db, config.sessionTtlMs);
   const relay = new RelayHub(sessions);
-  const lobby = new LobbyHub(Date.now, code => !!sessions.get(code));
+  const lobby = new LobbyHub(Date.now, code => !!sessions.get(code), config.stockActivity ?? "playdate");
 
   await app.register(cors, {
     origin: true,

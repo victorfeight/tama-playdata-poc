@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { WebSocket } from '../relay-server/node_modules/ws/wrapper.mjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
-const [url, output, relayUrl] = process.argv.slice(2);
+const [url, output, relayUrl, activity = "playdate"] = process.argv.slice(2);
+assert(["playdate", "gift"].includes(activity));
+const title = activity === "gift" ? "Gifts" : "Playdate";
+const label = activity === "gift" ? "Gift" : "Playdate";
+const wording = text => text.replaceAll("Playdate", label);
 if (!url || !output || !relayUrl) throw new Error('Usage: test-playdate-lobby-browser.mjs URL OUTPUT RELAY_URL');
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
@@ -46,13 +50,14 @@ try {
         }, async close() {}, getInfo() { return { usbVendorId: 0x1a86, usbProductId: 0x7523 }; }
       });
       Object.defineProperty(navigator, 'serial', { value: serial });
+      Object.defineProperty(navigator, 'clipboard', { value: { async writeText(value) { window.copiedText = value; } } });
     });
     const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
     await page.goto(url); await page.locator('#refresh-rooms:not([disabled])').waitFor();
     return page;
   };
   const host = await makePage(), guest = await makePage();
-  assert.equal(await host.title(), 'Playdate · Paradise Link');
+  assert.equal(await host.title(), `${title} · Paradise Link`);
   assert(!(await host.locator('#public-room').isChecked()));
   await host.screenshot({ path: `${output}/desktop-entry.png`, fullPage: true });
   await host.locator('#create-room').click();
@@ -61,6 +66,13 @@ try {
   await host.locator('#create-room').click(); await host.locator('#room-panel:not([hidden])').waitFor();
   await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Waiting for your friend');
   const code = await host.locator('#active-code').textContent(); assert.match(code, /^[A-Z0-9]{6}$/);
+  await host.locator('#copy-code').click();
+  assert.equal(await host.evaluate(() => window.copiedText), code);
+  await host.locator('#copy-room').click();
+  const invite = new URL(await host.evaluate(() => window.copiedText));
+  assert.equal(invite.searchParams.get('room'), code);
+  assert.equal(invite.pathname, new URL(url).pathname);
+  checks.push('Separate code/invite copy preserves the current activity page');
   await guest.locator('#nickname').fill('<b>Willow</b>'); await guest.locator('#refresh-rooms').click();
   await guest.getByRole('button', { name: 'Join Fern’s room' }).click();
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’re both here');
@@ -68,7 +80,7 @@ try {
   assert.equal(await host.locator('#room-members b').count(), 0);
   checks.push('Existing Playdate entry, private default, nickname validation, public discovery, text-safe player names');
   await host.locator('#connect-serial').click(); await guest.locator('#connect-serial').click();
-  await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’ll wait on Playdate');
+  await host.waitForFunction(expected => document.querySelector('#next-heading').textContent === expected, wording('You’ll wait on Playdate'));
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’ll press B');
   assert((await host.locator('#starter-summary').textContent()).includes('presses B. You wait.'));
   assert((await guest.locator('#starter-summary').textContent()).includes('You press B.'));
@@ -81,7 +93,7 @@ try {
   await host.locator('#starter-choice:not([hidden])').waitFor();
   await host.locator('#start-me').click();
   await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’ll press B');
-  await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’ll wait on Playdate');
+  await guest.waitForFunction(expected => document.querySelector('#next-heading').textContent === expected, wording('You’ll wait on Playdate'));
   assert.equal(await guest.locator('#start-friend').getAttribute('aria-pressed'), 'true');
   await host.reload();
   await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’re both here');
@@ -90,7 +102,7 @@ try {
   await guest.locator('#starter-choice:not([hidden])').waitFor();
   await guest.locator('#start-me').click();
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’ll press B');
-  await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’ll wait on Playdate');
+  await host.waitForFunction(expected => document.querySelector('#next-heading').textContent === expected, wording('You’ll wait on Playdate'));
   assert.deepEqual(await guest.evaluate(() => window.uartWrites), [[1, 2, 3, 4]]);
   checks.push('Either player chooses the starter; both pages agree; selection survives reload; selection never writes to UART');
 
@@ -105,11 +117,11 @@ try {
   assert(logText.includes('Bytes in: 4; out: 3'));
   assert(/\[\d{4}-\d{2}-\d{2}T[^\]]+\] <- peer:/.test(logText));
   assert(logText.includes('-> device:'));
-  assert(!logText.includes((await guest.evaluate(() => JSON.parse(sessionStorage.getItem('playdate-lobby')))).token));
+  assert(!logText.includes((await guest.evaluate(activity => JSON.parse(sessionStorage.getItem(`${activity}-lobby`)), activity)).token));
   await guest.locator('.exchange-details').evaluate(node => node.open = false);
   checks.push('Saved timestamped local diagnostics include adapter identity and both byte directions, without room credentials');
   await guest.locator('#start-prompt').click();
-  await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Go to Connection → Playdate and wait now');
+  await host.waitForFunction(expected => document.querySelector('#next-heading').textContent === expected, wording('Go to Connection → Playdate and wait now'));
   await host.locator('#start-prompt').click();
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Press B now');
   await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Wait—your friend is starting');
@@ -125,7 +137,7 @@ try {
   });
   await guest.screenshot({ path: `${output}/press-b-now.png`, fullPage: true });
   assert.deepEqual(await guest.evaluate(() => window.uartWrites), [[1, 2, 3, 4]]);
-  await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Go to Connection → Playdate and wait now', null, { timeout: 12000 });
+  await host.waitForFunction(expected => document.querySelector('#next-heading').textContent === expected, wording('Go to Connection → Playdate and wait now'), { timeout: 12000 });
   assert(await guest.locator('#start-window').isHidden());
   await host.locator('#start-prompt').click();
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Press B now');
@@ -159,11 +171,11 @@ try {
   await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’re both here');
   assert(await guest.locator('#room-panel').isVisible());
   await guest.locator('#connect-serial').click();
-  await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’ll wait on Playdate');
+  await host.waitForFunction(expected => document.querySelector('#next-heading').textContent === expected, wording('You’ll wait on Playdate'));
   await guest.reload();
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’re both here');
   await guest.locator('#connect-serial').click();
-  await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'You’ll wait on Playdate');
+  await host.waitForFunction(expected => document.querySelector('#next-heading').textContent === expected, wording('You’ll wait on Playdate'));
   await guest.locator('#leave-room').click(); await guest.locator('#lobby-entry:not([hidden])').waitFor();
   assert.equal(await guest.locator('#adapter-status').textContent(), 'Adapter connected');
   await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Waiting for your friend');
@@ -188,7 +200,7 @@ try {
   assert.deepEqual(await api(`/sessions/${browserCode}/join`), ticket);
   const oldGuest = await desktop(browserCode, ticket.token, 'b');
   await until(() => oldGuest.messages.includes('peer connected'));
-  await host.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Open Playdate and wait');
+  await host.waitForFunction(expected => document.querySelector('#next-heading').textContent === expected, wording('Open Playdate and wait'));
   assert((await host.locator('#room-members').textContent()).includes('check adapter in their app'));
   assert(await host.locator('#starter-choice').isHidden());
   assert((await host.locator('#next-instruction').textContent()).includes('start the adapter bridge'));
@@ -203,7 +215,7 @@ try {
   checks.push('Browser host with legacy desktop guest: idempotent guest ticket, presence-only text, unchanged binary UART, explicit unknown adapter state');
 
   // Old desktop host, new browser guest: fallback and legacy presence adaptation.
-  const oldRoom = await api('/sessions', { 'x-app-name': 'tamahome-desktop-playdate' });
+  const oldRoom = await api('/sessions', { 'x-app-name': activity === 'gift' ? 'trade-web' : 'tamahome-desktop-playdate' });
   const oldHost = await desktop(oldRoom.code, oldRoom.token, 'a');
   await guest.locator('#room-code').fill(oldRoom.code); await guest.locator('#join-room').click();
   await guest.waitForFunction(() => document.querySelector('#next-heading').textContent === 'Press B once');
@@ -229,7 +241,7 @@ try {
   assert(await guest.locator('#starter-choice').isHidden());
   checks.push('Legacy desktop host with browser guest: fallback, bidirectional UART, host reconnect, browser reload and leave; no false adapter-ready claims');
   assert.deepEqual(errors, []);
-  await writeFile(`${output}/browser.json`, JSON.stringify({ passed: true, checks, scope: 'Actual local lobby service and browser pages; simulated UART streams, not hardware or native firmware' }, null, 2));
+  await writeFile(`${output}/browser.json`, JSON.stringify({ passed: true, activity, checks, scope: 'Actual local lobby service and browser pages; simulated UART streams, not hardware or native firmware' }, null, 2));
   console.log(JSON.stringify({ passed: true, checks }, null, 2));
 } catch (error) {
   const pages = browser.contexts().flatMap(context => context.pages());

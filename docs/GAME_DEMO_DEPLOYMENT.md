@@ -3,6 +3,12 @@
 Inspected by read-only SSH on 2026-10-16. No remote files, services or DNS were
 changed. Existing SSH credentials were used without printing key contents.
 
+## Gift parity follow-up
+
+The local Gift integration now shares this source while retaining a separate service.
+See [Gift lobby parity](GIFT_LOBBY_PARITY.md) for scope, qualification and deployment.
+The historical separate-source notes below describe the earlier release.
+
 ## Combined Playdate + Games release (2026-10-17)
 
 The Games branch now integrates the serial lifecycle fixes and the received-ghost

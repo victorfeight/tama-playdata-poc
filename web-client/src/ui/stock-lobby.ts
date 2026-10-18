@@ -7,8 +7,8 @@ interface Hooks {
   peerChanged(): void;
 }
 
-/** Playdate presentation around shared room membership. UART stays in main. */
-export class PlaydateLobby {
+/** Shared Playdate/Gift presentation around shared room membership. UART stays in main. */
+export class StockLobby {
   private entry: LobbyEntry | undefined;
   private socket: WebSocket | undefined;
   private snapshot: LobbySnapshot | undefined;
@@ -26,8 +26,8 @@ export class PlaydateLobby {
 
   constructor(private readonly client: LobbyClient, private readonly hooks: Hooks) {
     try {
-      this.nickname.value = localStorage.getItem("playdate-nickname") ?? "";
-      const saved = JSON.parse(sessionStorage.getItem("playdate-lobby") ?? "null");
+      this.nickname.value = localStorage.getItem(`${client.activity}-nickname`) ?? "";
+      const saved = JSON.parse(sessionStorage.getItem(`${client.activity}-lobby`) ?? "null");
       if (saved && /^[A-Z0-9]{6}$/.test(saved.code) && /^[a-f0-9]{64}$/.test(saved.token) && typeof saved.memberId === "string") this.entry = saved;
     } catch { /* A blocked or old storage entry does not prevent joining. */ }
     const invite = new URLSearchParams(location.search).get("room");
@@ -68,6 +68,11 @@ export class PlaydateLobby {
         this.status.textContent = `Share room code ${this.entry.code} with your friend.`;
       }
     }));
+    element("copy-code").addEventListener("click", () => void this.run(async () => {
+      if (!this.entry) return;
+      try { await navigator.clipboard.writeText(this.entry.code); this.status.textContent = "Room code copied."; }
+      catch { this.status.textContent = `Your room code is ${this.entry.code}.`; }
+    }));
     this.render();
     if (this.entry) void this.run(() => this.connect());
     else void this.refresh();
@@ -90,7 +95,7 @@ export class PlaydateLobby {
 
   private name(): string {
     const value = readNickname(this.nickname);
-    try { localStorage.setItem("playdate-nickname", value); } catch { /* Optional convenience. */ }
+    try { localStorage.setItem(`${this.client.activity}-nickname`, value); } catch { /* Optional convenience. */ }
     return value;
   }
 
@@ -110,7 +115,7 @@ export class PlaydateLobby {
     this.hooks.socket(undefined);
     this.peerSignature = "";
     this.snapshot = undefined;
-    try { sessionStorage.setItem("playdate-lobby", JSON.stringify(this.entry)); } catch { /* No persistent reconnect. */ }
+    try { sessionStorage.setItem(`${this.client.activity}-lobby`, JSON.stringify(this.entry)); } catch { /* No persistent reconnect. */ }
     const ws = this.client.connect(this.entry);
     this.socket = ws;
     this.status.textContent = "Joining your room…";
@@ -127,6 +132,7 @@ export class PlaydateLobby {
         let update: LobbySnapshot;
         try { update = JSON.parse(event.data); } catch { return; }
         if (update.type !== "lobby" || update.code !== this.entry?.code) return;
+        if (update.activity !== this.client.activity) { ws.close(); reject(new Error("This room is for another activity.")); return; }
         const wasReady = this.snapshot?.startPrompt === "ready";
         this.snapshot = update;
         const remaining = Math.max(0, Math.min(8000, update.readyForMs ?? 0));
@@ -180,7 +186,7 @@ export class PlaydateLobby {
     this.socket = undefined; this.entry = undefined; this.snapshot = undefined;
     ws?.close();
     this.hooks.socket(undefined); this.hooks.peerChanged();
-    try { sessionStorage.removeItem("playdate-lobby"); } catch { /* Optional storage. */ }
+    try { sessionStorage.removeItem(`${this.client.activity}-lobby`); } catch { /* Optional storage. */ }
     this.peerSignature = "";
     this.render();
     this.nickname.focus();
@@ -199,7 +205,7 @@ export class PlaydateLobby {
         list.replaceChildren(...rooms.map(room => {
           const row = document.createElement("li"); row.className = "room-listing";
           const name = document.createElement("span"); name.textContent = room.nickname;
-          const label = document.createElement("small"); label.textContent = "Looking for a Playdate";
+          const label = document.createElement("small"); label.textContent = this.client.activity === "gift" ? "Ready to exchange gifts" : "Looking for a Playdate";
           const text = document.createElement("div"); text.append(name, label);
           const join = document.createElement("button"); join.type = "button"; join.className = "secondary";
           join.textContent = "Join"; join.setAttribute("aria-label", `Join ${room.nickname}’s room`);
@@ -230,6 +236,7 @@ export class PlaydateLobby {
   }
 
   private render(): void {
+    const activityName = this.client.activity === "gift" ? "Gift" : "Playdate";
     const inRoom = !!this.entry;
     const online = this.socket?.readyState === WebSocket.OPEN && !!this.snapshot;
     element("lobby-entry").hidden = inRoom;
@@ -267,7 +274,7 @@ export class PlaydateLobby {
     prompt.hidden = true;
     prompt.disabled = false;
     if (!inRoom) {
-      heading.textContent = "A Playdate, wherever you are";
+      heading.textContent = `A ${activityName}, wherever you are`;
       instruction.textContent = "Find someone in an open room, or create a room for a friend. Connect your adapter whenever you’re ready.";
     } else if (!online) {
       heading.textContent = "Reconnect to your room";
@@ -280,17 +287,17 @@ export class PlaydateLobby {
       instruction.textContent = !this.adapter ? "Connect your UART adapter and attach it to your Paradise. Your friend’s connection appears above."
         : "Your adapter is connected. Waiting for your friend to connect theirs.";
     } else {
-      heading.textContent = iStart ? "Press B once" : "Open Playdate and wait";
+      heading.textContent = iStart ? "Press B once" : `Open ${activityName} and wait`;
       instruction.textContent = iStart
-        ? "On both toys: Menu → Connection → Playdate. Once your friend is waiting on that screen, press B on your toy once."
-        : "On both toys: Menu → Connection → Playdate. Stay on that screen without pressing B; your friend presses B to start.";
+        ? `On both toys: Menu → Connection → ${activityName}. Once your friend is waiting on that screen, press B on your toy once.`
+        : `On both toys: Menu → Connection → ${activityName}. Stay on that screen without pressing B; your friend presses B to start.`;
       if (peer.adapterConnected === null)
         instruction.textContent = "First, ask your friend to start the adapter bridge in their app. " + instruction.textContent;
       if (this.snapshot?.canChooseStarter) {
         const ready = this.snapshot.startPrompt === "ready" && performance.now() < this.readyUntil;
         const requested = !!this.snapshot.startPrompt;
         prompt.hidden = ready || (!iStart && !requested);
-        prompt.textContent = iStart ? "Ask friend to get ready" : "I’m on Playdate screen";
+        prompt.textContent = iStart ? "Ask friend to get ready" : `I’m on ${activityName} screen`;
         prompt.disabled = iStart && this.snapshot.startPrompt === "prepare";
         if (this.snapshot.startPrompt === "started") {
           heading.textContent = "Follow your toy";
@@ -299,26 +306,30 @@ export class PlaydateLobby {
         } else if (this.snapshot.outcome === "interrupted") {
           heading.textContent = "The exchange stopped";
           instruction.textContent = iStart
-            ? "Reopen Playdate on both toys. Your friend will confirm when ready."
-            : "Reopen Connection → Playdate, then confirm here. Don’t press B.";
+            ? `Reopen ${activityName} on both toys. Your friend will confirm when ready.`
+            : `Reopen Connection → ${activityName}, then confirm here. Don’t press B.`;
         } else if (ready) {
           this.showStartWindow = iStart;
           heading.textContent = iStart ? "Press B now" : "Wait—your friend is starting";
           instruction.textContent = iStart
-            ? "Your friend is ready. On your Paradise, open Connection → Playdate and press B once now."
-            : "Stay on Playdate without pressing B. We’ve told your friend to press B on their toy.";
+            ? `Your friend is ready. On your Paradise, open Connection → ${activityName} and press B once now.`
+            : `Stay on ${activityName} without pressing B. We’ve told your friend to press B on their toy.`;
         } else if (requested) {
-          heading.textContent = iStart ? "Waiting for your friend’s ready" : "Go to Connection → Playdate and wait now";
+          heading.textContent = iStart ? "Waiting for your friend’s ready" : `Go to Connection → ${activityName} and wait now`;
           instruction.textContent = iStart
-            ? "Your friend needs to freshly open Playdate and confirm here. Then we’ll tell you to press B."
-            : "Don’t press B. Once you’re on that screen, click “I’m on Playdate screen.” Your friend will be told to press B. If you were already waiting there, reopen Playdate first.";
+            ? `Your friend needs to freshly open ${activityName} and confirm here. Then we’ll tell you to press B.`
+            : `Don’t press B. Once you’re on that screen, click “I’m on ${activityName} screen.” Your friend will be told to press B. If you were already waiting there, reopen ${activityName} first.`;
         } else {
-          heading.textContent = iStart ? "You’ll press B" : "You’ll wait on Playdate";
+          heading.textContent = iStart ? "You’ll press B" : `You’ll wait on ${activityName}`;
           instruction.textContent = iStart
             ? "Ask your friend to get ready. Once they confirm, we’ll tell you to press B on your toy."
-            : "Your friend will ask you to open Playdate. Stay on the normal menu until then.";
+            : `Your friend will ask you to open ${activityName}. Stay on the normal menu until then.`;
         }
       }
+    }
+    if (this.client.activity === "gift") {
+      if (this.snapshot?.startPrompt === "started") instruction.textContent = "Choose your items, review the exchange and confirm on your toys. Keep this page open until both toys finish.";
+      if (this.snapshot?.outcome === "interrupted") instruction.textContent += " Check what each toy shows before trying again; the browser cannot tell whether an item was saved.";
     }
     this.updateStartWindow();
   }

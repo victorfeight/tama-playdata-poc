@@ -13,10 +13,14 @@ import tempfile
 
 def verify(source):
     manifest = json.loads((source / 'manifest.json').read_text())
-    if not manifest.get('fullWeb') or manifest.get('dirty'):
-        raise ValueError('Expected a clean, full web release')
+    gift = manifest.get('activity') == 'gift'
+    if (not manifest.get('fullWeb') and not gift) or manifest.get('dirty'):
+        raise ValueError('Expected a clean full web or Gift release')
+    if gift and manifest.get('requiredRelayActivity') != 'gift':
+        raise ValueError('Gift release must identify its matching relay activity')
     files = manifest['files']
-    for required in ('index.html', 'games/index.html', 'games/payload.json', 'games/payload-pocket-puzzle.json'):
+    required_entries = ('index.html',) if gift else ('index.html', 'games/index.html', 'games/payload.json', 'games/payload-pocket-puzzle.json')
+    for required in required_entries:
         if required not in files:
             raise ValueError(f'Missing release entry: {required}')
     for name, expected in files.items():
@@ -45,7 +49,7 @@ def main():
         raise ValueError('Publishing requires both --live and --backup')
     # Exclusive backup; an existing release/rollback must never be overwritten.
     shutil.copytree(args.live, args.backup)
-    entries = {'index.html', 'games/index.html'}
+    entries = {'index.html', 'games/index.html', 'gifts/index.html'}
     names = sorted(manifest['files'], key=lambda name: (name in entries, name.endswith('.json'), name))
     for name in names:
         target = args.live / name

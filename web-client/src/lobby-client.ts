@@ -1,4 +1,4 @@
-import type { LobbyEntry, LobbyListing, LobbySnapshot } from "@tama-breed-poc/tama-protocol";
+import type { LobbyEntry, LobbyListing, LobbySnapshot, StockActivity } from "@tama-breed-poc/tama-protocol";
 
 class LobbyHttpError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -6,7 +6,7 @@ class LobbyHttpError extends Error {
 
 /** Shared room API. Activity pages own their presentation and serial bridge. */
 export class LobbyClient {
-  constructor(private readonly baseUrl: string) {}
+  constructor(private readonly baseUrl: string, readonly activity: StockActivity = "playdate") {}
 
   async list(): Promise<LobbyListing[]> {
     return (await this.request<{ rooms: LobbyListing[] }>("/sessions/lobby")).rooms;
@@ -18,8 +18,9 @@ export class LobbyClient {
     try { return await this.request(`/sessions/lobby/${encodeURIComponent(code)}/join`, { nickname }); }
     catch (error) { if (!(error instanceof LobbyHttpError) || error.status !== 404) throw error; }
     const old = await this.request<{ token: string; app: string | null }>(`/sessions/${encodeURIComponent(code)}/join`, {});
-    if (old.app !== null && old.app !== "playdate-web" && old.app !== "tamahome-desktop-playdate")
-      throw new Error("That code belongs to another activity. Ask for a Playdate room code.");
+    const allowed = this.activity === "gift" ? ["trade-web", "gift-web", "tamahome-desktop-gift"] : ["playdate-web", "tamahome-desktop-playdate"];
+    if (old.app !== null && !allowed.includes(old.app))
+      throw new Error(`That code belongs to another activity. Ask for a ${this.activity === "gift" ? "Gift" : "Playdate"} room code.`);
     return { code, token: old.token, memberId: "legacy-guest", legacyNickname: nickname };
   }
   async leave(entry: LobbyEntry): Promise<void> {
@@ -34,7 +35,7 @@ export class LobbyClient {
       // Adapt old presence text to UI metadata only; binary UART is untouched.
       let present = false, connection = 0;
       const publish = () => {
-        const snapshot: LobbySnapshot = { type: "lobby", code: entry.code, activity: "playdate", visibility: "private", capacity: 2,
+        const snapshot: LobbySnapshot = { type: "lobby", code: entry.code, activity: this.activity, visibility: "private", capacity: 2,
           members: [
             { id: "legacy-host", nickname: "Your friend", slot: 0, connected: present, adapterConnected: null, connection },
             { id: entry.memberId, nickname: entry.legacyNickname!, slot: 1, connected: true, adapterConnected: null, connection: 1 }

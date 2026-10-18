@@ -19,7 +19,8 @@ export class PlaydateOutcomeObserver {
   private breedAccepted = false;
   private sync2 = new Set<PlaydateSide>();
 
-  constructor(private readonly changed: (phase: PlaydateOutcome) => void) {
+  constructor(private readonly changed: (phase: PlaydateOutcome) => void,
+    private readonly activity: "playdate" | "gift" = "playdate") {
     const make = (side: PlaydateSide) => new TcpObserver({
       framedCommand: line => {
         this.observers[side === 0 ? 1 : 0].peerCommand(line);
@@ -71,6 +72,7 @@ export class PlaydateOutcomeObserver {
   }
 
   private packet(packet: ObservedPacket): void {
+    if (this.activity !== "playdate") return;
     if (packet.msgType !== 1 || (packet.rawMsgType & MSG_FLAG_SET_SESSION_ID) || packet.payload.length !== 4) return;
     const view = new DataView(packet.payload.buffer, packet.payload.byteOffset, 4);
     const result = view.getUint16(0, true), flags = view.getUint16(2, true);

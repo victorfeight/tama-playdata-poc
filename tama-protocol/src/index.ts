@@ -30,3 +30,5 @@ export * from "./game-room";
 
 export * from "./playdate-outcome";
 export * from "./nickname";
+
+export * from "./gift";

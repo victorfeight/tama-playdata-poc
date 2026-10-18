@@ -63,7 +63,7 @@ is ready. The lobby must not change the firmware's tested host-waits/guest-B
 exchange ordering or introduce a browser start gate into the raw byte relay.
 
 The published implementation exists in `relay-server/src/lobby.ts`,
-`web-client/src/lobby-client.ts`, and `web-client/src/ui/playdate-lobby.ts`.
+`web-client/src/lobby-client.ts`, and `web-client/src/ui/stock-lobby.ts`.
 The existing Playdate page hosts the UI. Five membership tests and the real
 local two-browser flow pass, including simulated bidirectional UART, private
 and public joining, disconnect/reload/leave, and 390px layout. Evidence is in

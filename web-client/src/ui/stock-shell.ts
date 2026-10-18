@@ -1,0 +1,103 @@
+import type { StockActivity } from "@tama-breed-poc/tama-protocol";
+
+/** Same shell, controls and styles for both stock exchanges. No user HTML. */
+export function mountStockShell(activity: StockActivity): void {
+  let html = `    <main class="app-shell">
+      <header class="page-header">
+        <div><a class="back-link" href="https://tools.bbamorachi.us/">← All tools</a><h1>Playdate</h1><p>Little friends. Any distance.</p></div>
+        <div class="adapter-control"><span id="adapter-status" class="status-label" data-connected="false">Adapter disconnected</span><button id="connect-serial" class="secondary" type="button">Connect adapter</button></div>
+      </header>
+      <p id="connection-message" class="notice" role="status" hidden></p>
+      <section class="device" aria-label="Playdate scene and room">
+        <div class="scene-column">
+          <canvas id="link-canvas" width="800" height="520" aria-label="Your Paradise and your friend’s Paradise. Ghosts and friendship appear during the exchange."></canvas>
+          <section id="next-step" class="next-step">
+            <div role="status" aria-live="polite" aria-atomic="true">
+            <p class="eyebrow">Your next step</p><h2 id="next-heading">A Playdate, wherever you are</h2>
+            <p id="next-instruction">Find someone in an open room, or create a room for a friend. Connect your adapter whenever you’re ready.</p>
+            </div>
+            <div id="start-window" hidden>
+              <progress id="start-window-progress" max="8000" value="0" aria-label="Time left to start this Playdate"></progress>
+              <span id="start-window-label" aria-hidden="true"></span>
+            </div>
+            <button id="start-prompt" type="button" hidden>Ask friend to get ready</button>
+          </section>
+        </div>
+        <aside class="panel" aria-label="Playdate lobby">
+          <div id="lobby-entry">
+            <p class="eyebrow">Meet up</p><h2>Find a friend</h2>
+            <label class="field" for="nickname">Your nickname<input id="nickname" maxlength="40" autocomplete="nickname" placeholder="What should we call you?" aria-describedby="nickname-hint" /></label>
+            <p id="nickname-hint" class="hint">Shown to other players. No account needed.</p>
+            <div class="create-controls">
+              <button id="create-room" type="button" data-room-action>Create a room</button>
+              <label class="checkbox"><input id="public-room" type="checkbox" /> List my room publicly</label>
+            </div>
+            <form id="join-form" class="join-form">
+              <label for="room-code">Have a room code?</label>
+              <div class="input-action"><input id="room-code" maxlength="6" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="ABC123" /><button id="join-room" class="secondary" type="submit" data-room-action>Join</button></div>
+            </form>
+          </div>
+          <section id="room-panel" hidden aria-label="Your room">
+            <div class="room-heading"><p id="room-visibility" class="eyebrow">Your room</p><button id="leave-room" class="text-button" type="button" data-room-action>Leave</button></div>
+            <h2 id="active-code" class="room-code" tabindex="-1"></h2>
+            <div class="invite-actions"><button id="copy-code" class="secondary full-width" type="button" data-room-action>Copy room code</button>
+            <button id="copy-room" class="secondary full-width" type="button" data-room-action>Copy invite link</button></div>
+            <ul id="room-members" class="member-list" aria-label="Players"></ul>
+            <fieldset id="starter-choice" class="starter-choice" hidden>
+              <legend>Who presses B?</legend>
+              <div class="starter-options">
+                <button id="start-me" type="button" class="secondary" aria-pressed="false">Me</button>
+                <button id="start-friend" type="button" class="secondary" aria-pressed="false">My friend</button>
+              </div>
+              <p id="starter-summary" class="hint" role="status"></p>
+              <p class="hint">Choose before starting. Only the selected player presses B to start. Follow later prompts on each toy.</p>
+            </fieldset>
+            <button id="reconnect-room" type="button" class="full-width" data-room-action hidden>Reconnect to room</button>
+          </section>
+          <p id="lobby-status" class="notice" role="status"></p>
+          <section id="room-browser" class="room-browser" aria-labelledby="rooms-heading">
+            <div class="room-heading"><h3 id="rooms-heading">Open rooms</h3><button id="refresh-rooms" class="text-button" type="button">Refresh</button></div>
+            <ul id="public-rooms" class="room-list"></ul>
+            <p id="rooms-empty" class="empty-state">Looking for open rooms…</p>
+          </section>
+        </aside>
+      </section>
+      <details class="help-panel">
+        <summary>First Playdate? Here’s how it works</summary>
+        <ol class="instructions">
+          <li>Plug your UART adapter into your computer and attach it to your Paradise. Click <b>Connect adapter</b> and select its port.</li>
+          <li>Choose a nickname. Join an open room, or create one and share its invite link. Rooms are private unless you choose to list them.</li>
+          <li>Wait until both players are in the room with their adapters connected. Then, on both toys, open <b>Menu → Connection → Playdate</b> when the page asks.</li>
+          <li>Choose who presses <b>B</b>. Your choice updates both pages: one player presses once, the other waits. The screen can time out while waiting; reopen it on both toys if needed.</li>
+          <li>Your ghosts and friendship appear in the scene as the toys exchange data.</li>
+        </ol>
+        <p class="hint">Adapter status confirms the browser connection. It can’t tell which menu is open on your toy.</p>
+      </details>
+      <details class="exchange-details">
+        <summary>Connection details &amp; log</summary>
+        <div class="exchange">
+          <div class="ghost-panel">
+            <h2>Live exchange</h2><p id="ghost-summary">Your exchange details will appear here.</p>
+            <dl class="stats">
+              <div><dt>Adapter</dt><dd id="port">disconnected</dd></div><div><dt>Room</dt><dd id="room">none</dd></div>
+              <div><dt>Role</dt><dd id="role">—</dd></div><div><dt>Activity</dt><dd id="activity">—</dd></div>
+              <div><dt>Bytes in</dt><dd id="bytes-in">0</dd></div><div><dt>Bytes out</dt><dd id="bytes-out">0</dd></div>
+            </dl>
+            <button id="save-log" type="button" class="secondary">Save connection log</button>
+            <p class="hint">Logs stay in this browser. Save both players’ logs after a failed attempt.</p>
+          </div><pre id="byte-log" aria-label="Byte log"></pre>
+        </div>
+      </details>
+      <footer>Paradise Link · Two toys, one Playdate</footer>
+    </main>
+`;
+  if (activity === "gift") {
+    html = html.replaceAll("Playdate", "Gift")
+      .replace("<h1>Gift</h1>", "<h1>Gifts</h1>")
+      .replace("Little friends. Any distance.", "Little gifts. Any distance.")
+      .replace("Ghosts and friendship appear during the exchange.", "Item offers appear during the exchange.")
+      .replace("Your ghosts and friendship appear in the scene as the toys exchange data.", "Choose your items, review and confirm on the toys. Keep the page open until both toys finish; item previews are not proof of saving.")
+      .replace("Two toys, one Gift", "Two toys, a little generosity");
+  }
+  document.body.insertAdjacentHTML("afterbegin", html);
+}
