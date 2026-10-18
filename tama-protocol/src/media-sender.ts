@@ -73,3 +73,28 @@ export async function streamMusic(channel: UartChannel, bundle: Uint8Array, reco
   await readMediaResponse(channel, 0xfffffffd, 60_000, "complete music verification");
   return result;
 }
+
+/** Guarded Pocket Puzzle removal; addresses and ownership policy stay on toy. */
+export async function removeMusicBank(channel: UartChannel, bankCrc32: number,
+  progress: (value: MediaProgress) => void): Promise<MediaProgress> {
+  if (!Number.isInteger(bankCrc32) || bankCrc32 < 0 || bankCrc32 > 0xffffffff) throw new Error("Invalid music removal contract.");
+  if (await readMediaResponse(channel, 0xfffffffc, 120_000, "music ownership check") !== 3)
+    throw new Error("The toy is not running the music remover. Nothing was requested.");
+  const command = new Uint8Array(16); command.set(new TextEncoder().encode("PPCLR001"));
+  view(command).setUint32(8, bankCrc32, true);
+  view(command).setUint32(12, crc32(command.subarray(0, 12)), true);
+  await channel.write(command);
+  if (await readMediaResponse(channel, 0xfffffffe, 10_000, "removal confirmation") !== 3) throw new Error("Music removal was not accepted.");
+  const result = { completed: 0, total: 256, written: 0, matched: 0 };
+  progress({ ...result });
+  for (let sequence = 0; sequence < 256; sequence++) {
+    const detail = await readMediaResponse(channel, sequence, 30_000, "erasing and checking music space");
+    if (detail === 1) result.written++;
+    else if (detail === 2) result.matched++;
+    else throw new Error("The toy did not verify the erased music sector.");
+    result.completed++; progress({ ...result });
+  }
+  if (await readMediaResponse(channel, 0xfffffffd, 60_000, "complete empty-space verification") !== 3)
+    throw new Error("The toy did not verify the empty music space.");
+  return result;
+}

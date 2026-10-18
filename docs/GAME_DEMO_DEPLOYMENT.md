@@ -23,7 +23,8 @@ ordering, repair native SHS2 visitor portraits, or implement 2–16-player hosti
 
    ```sh
    node scripts/package-game-demo.mjs NEW_RELEASE --full-web \
-     BLOCKS/app-build.json PUZZLE/app-build.json --music-stream=MUSIC_DIRECTORY
+     BLOCKS/app-build.json PUZZLE/app-build.json --music-stream=MUSIC_DIRECTORY \
+     --music-remover=REMOVER_DIRECTORY
    python3 scripts/publish-web-release.py NEW_RELEASE
    ```
 

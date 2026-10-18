@@ -1,6 +1,6 @@
 // Packaging contract test against a real source-build receipt; no upload.
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, access, rm } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, access, rm, mkdir, copyFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -29,11 +29,11 @@ try {
     result = run(output, input); assert.notEqual(result.status, 0, name);
     await assert.rejects(access(output), `${name} must fail before creating a partial package`);
   }
-  const [otherReceipt, setupArchive, musicStream] = process.argv.slice(3);
-  if (otherReceipt && musicStream) {
+  const [otherReceipt, setupArchive, musicStream, musicRemover] = process.argv.slice(3);
+  if (otherReceipt && musicStream && musicRemover) {
     const archive = setupArchive && setupArchive !== "-" ? setupArchive : undefined;
     const full = path.join(directory, "full");
-    result = spawnSync(process.execPath, [packager, full, receiptPath, otherReceipt, "--full-web", `--music-stream=${musicStream}`,
+    result = spawnSync(process.execPath, [packager, full, receiptPath, otherReceipt, "--full-web", `--music-stream=${musicStream}`, `--music-remover=${musicRemover}`,
       ...(archive ? [`--music-setup=${archive}`] : [])], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr);
     const manifest = JSON.parse(await readFile(path.join(full, "manifest.json"), "utf8"));
@@ -44,6 +44,19 @@ try {
     assert.equal(puzzle.bytes, 65532);
     assert.equal(manifest.files[`games/${puzzle.music.helper.file}`], puzzle.music.helper.sha256);
     assert.equal(manifest.files[`games/${puzzle.music.bundle.file}`], puzzle.music.bundle.sha256);
+    assert.equal(manifest.files[`games/${puzzle.music.removal.helper.file}`], puzzle.music.removal.helper.sha256);
+    const missingRemover = path.join(directory, 'missing-remover');
+    result = spawnSync(process.execPath, [packager, missingRemover, receiptPath, otherReceipt, '--full-web', `--music-stream=${musicStream}`], { encoding: 'utf8' });
+    assert.notEqual(result.status, 0, 'Full release must preserve music removal');
+    await assert.rejects(access(missingRemover));
+    const wrongBank = path.join(directory, 'wrong-bank'); await mkdir(wrongBank);
+    const remover = JSON.parse(await readFile(path.join(musicRemover, 'manifest.json'), 'utf8'));
+    await copyFile(path.join(musicRemover, 'bootstrap.pdlo.bin'), path.join(wrongBank, 'bootstrap.pdlo.bin'));
+    await writeFile(path.join(wrongBank, 'manifest.json'), JSON.stringify({ ...remover, bank_sha256: '0'.repeat(64) }));
+    const wrongOutput = path.join(directory, 'wrong-bank-package');
+    result = spawnSync(process.execPath, [packager, wrongOutput, receiptPath, otherReceipt, '--full-web', `--music-stream=${musicStream}`, `--music-remover=${wrongBank}`], { encoding: 'utf8' });
+    assert.notEqual(result.status, 0, 'Remover must match the installed music bank');
+    await assert.rejects(access(wrongOutput));
     const missingStream = path.join(directory, "missing-music");
     const missing = spawnSync(process.execPath, [packager, missingStream, receiptPath, otherReceipt, "--full-web"], { encoding: "utf8" });
     assert.notEqual(missing.status, 0, "Full release must include browser music");

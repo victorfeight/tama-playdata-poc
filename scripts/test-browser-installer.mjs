@@ -15,9 +15,9 @@ try {
         window.portOpenCount = (window.portOpenCount ?? 0) + 1;
         let controller, phase = 'download', remaining = 0, sendingHelper = true, current = 0;
         const crc32 = bytes => { let crc = 0xffffffff; for (const b of bytes) { crc ^= b; for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0); } return (crc ^ 0xffffffff) >>> 0; };
-        const reply = (seq, detail = 0) => { const b = new Uint8Array(16), v = new DataView(b.buffer); b.set([84,80,82,49]); v.setUint32(4, seq, true); b[9] = detail; v.setUint32(12, crc32(b.subarray(0,12)), true); controller.enqueue(b); };
+        const reply = (seq, detail = 0, status = 0) => { const b = new Uint8Array(16), v = new DataView(b.buffer); b.set([84,80,82,49]); v.setUint32(4, seq, true); b[8] = status; b[9] = detail; v.setUint32(12, crc32(b.subarray(0,12)), true); controller.enqueue(b); };
         this.readable = new ReadableStream({ start(c) { controller = c; window.serialRx = bytes => c.enqueue(new Uint8Array(bytes)); } });
-        window.returnToDownload = () => { phase = 'download'; sendingHelper = false; };
+        window.returnToDownload = (operation = 'game') => { phase = 'download'; sendingHelper = operation !== 'game'; window.helperMode = operation; };
         this.writable = new WritableStream({ write(bytes) {
           (window.serialWrites ??= []).push(bytes.length);
           if (window.unplugNextWrite) { window.unplugNextWrite = false; controller.error(new Error('USB disconnected')); return; }
@@ -27,9 +27,18 @@ try {
             else remaining -= bytes.length - 16;
             controller.enqueue(new TextEncoder().encode('ACK\r\n'));
             if (remaining === 0) {
-              if (sendingHelper) { phase = 'header'; reply(0xfffffffc); }
+              if (sendingHelper) {
+                if (window.helperMode === 'remove') { phase = 'remove'; reply(0xfffffffc, 3, window.refuseMusicRemoval ? 3 : 0); }
+                else { phase = 'header'; reply(0xfffffffc, 1); }
+              }
               else phase = 'game';
             }
+          } else if (phase === 'remove') {
+            if (window.refuseMusicRemoval) throw new Error('Must not send erase confirmation after refusal');
+            if (bytes.length !== 16 || new TextDecoder().decode(bytes.subarray(0, 8)) !== 'PPCLR001') throw new Error('Invalid remove command');
+            reply(0xfffffffe, 3);
+            for (let sector = 0; sector < 256; sector++) reply(sector, sector < 248 ? 1 : 2);
+            reply(0xfffffffd, 3); phase = 'ready';
           } else if (phase === 'header') { if (bytes.length !== 128) throw new Error('Expected stream header'); phase = 'records'; reply(0xfffffffe); }
           else if (phase === 'records') {
             if (bytes.length === 36) {
@@ -56,6 +65,7 @@ try {
   assert.equal(await page.locator('#payload-link').count(), 0);
   assert(!(await page.locator('body').textContent()).includes('INSTALL-MUSIC.cmd'));
   assert(!(await page.locator('body').textContent()).includes('Python'));
+  assert(!(await page.locator('#remove-music').isVisible()));
   await page.locator('#connect').click();
   await page.locator('#install-music:not([disabled])').waitFor();
   await page.screenshot({ path: `${output}/setup-desktop.png`, fullPage: true });
@@ -67,12 +77,32 @@ try {
   assert.equal(await page.locator('#device-state').textContent(), 'Connected');
   assert((await page.locator('#log').textContent()).includes('124 sectors written, 124 already matched'));
   checks.push('Verified actual packaged files; helper plus 248-sector music protocol with write/skip responses; explicit C/Download instruction; no ZIP/CLI prerequisite');
+  const beforeCancel = await page.evaluate(() => window.serialWrites.length);
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.locator('#remove-music').click();
+  assert.equal(await page.evaluate(() => window.serialWrites.length), beforeCancel);
+  await page.evaluate(() => window.returnToDownload('remove'));
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#remove-music').click();
+  await page.waitForFunction(() => document.querySelector('#install-status').textContent.startsWith('Music removed.'));
+  assert((await page.locator('#log').textContent()).includes('248 sectors erased, 8 already empty'));
+  assert((await page.locator('#install-status').textContent()).includes('Press C'));
+  assert.equal(await page.evaluate(() => window.portOpenCount), 1);
+  checks.push('Remove music requires connection and confirmation; cancel sends nothing; verified 256-sector completion shares adapter and tells user to press C');
+  await page.evaluate(() => { window.returnToDownload('remove'); window.refuseMusicRemoval = true; });
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#remove-music').click();
+  await page.waitForFunction(() => document.querySelector('#install-status').textContent.includes('Nothing was erased'));
+  assert.equal(await page.evaluate(() => window.serialWrites.at(-1)), 4108); // Last helper Download chunk, no removal command.
+  await page.evaluate(() => { window.refuseMusicRemoval = false; });
+  checks.push('Occupied music space refuses confirmation and offers C return without erasing');
   await page.evaluate(() => window.returnToDownload()); await page.locator('#send-game').click();
   await page.waitForFunction(() => document.querySelector('#install-status').textContent.startsWith('Game received.'));
   assert.equal(await page.evaluate(() => window.portOpenCount), 1);
   await page.locator('#group-nickname').fill('Fern');
   await page.locator('#group-create').click(); await page.locator('#group-current:not([hidden])').waitFor();
   await page.waitForFunction(() => document.querySelector('#group-players').textContent.includes('Fern'));
+  assert(!(await page.locator('#remove-music').isVisible()));
   socket.send(Buffer.from([4,5,6]));
   await page.waitForFunction(() => window.serialWrites.at(-1) === 3);
   checks.push('Game send and multiplayer bridge share the same open adapter');

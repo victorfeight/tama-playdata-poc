@@ -16,6 +16,7 @@ let gameAsset: InstallAsset | undefined, musicAssets: MusicAssets | undefined;
 let transferring = false;
 const installer = new GameInstallService(new URL("./", location.href));
 const musicButton = element<HTMLButtonElement>("install-music"), sendButton = element<HTMLButtonElement>("send-game");
+const removeMusicButton = element<HTMLButtonElement>("remove-music");
 const lines: string[] = [];
 function status(text: string) { element("status").textContent = text; }
 function controls() {
@@ -24,6 +25,8 @@ function controls() {
   element("device-state").textContent = serial ? "Connected" : "Not connected";
   sendButton.disabled = !serial || busy || !!room?.active || !gameAsset;
   musicButton.disabled = !serial || busy || !!room?.active || !musicAssets;
+  removeMusicButton.hidden = !musicAssets?.removal;
+  removeMusicButton.disabled = !serial || busy || !!room?.active || !musicAssets?.removal;
   element("install-actions").hidden = !serial || !!room?.active;
   for (const id of ["install-instruction", "game-download-status", "existing-game-hint"])
     element(id).hidden = !!room?.active;
@@ -64,11 +67,18 @@ function installProgress(value: InstallProgress) {
   if (value.total === undefined) bar.removeAttribute("value");
   else { bar.max = value.total; bar.value = value.done ?? 0; }
 }
-async function install(kind: "music" | "game") {
+async function install(kind: "music" | "game" | "remove") {
   if (!serial || room?.active) return;
   transferring = true;
   try {
-    if (kind === "music") {
+    if (kind === "remove") {
+      if (!musicAssets?.removal) throw new Error("Music removal is not available. Refresh and try again.");
+      const result = await installer.removeMusic(serial, musicAssets.removal, installProgress);
+      log(`Music space verified empty: ${result.written} sectors erased, ${result.matched} already empty.`);
+      element("install-status").textContent = "Music removed. Press C on your toy to return home. You can reinstall the soundtrack here anytime.";
+      element("install-instruction").textContent = "Press C to return home. To send a game, reopen Connection → Download → Download.";
+      status("Music removed and its space verified empty.");
+    } else if (kind === "music") {
       if (!musicAssets) throw new Error("Music files are not available yet.");
       const result = await installer.installMusic(serial, musicAssets, installProgress);
       log(`Music verified: ${result.written} sectors written, ${result.matched} already matched.`);
@@ -90,6 +100,11 @@ async function install(kind: "music" | "game") {
   } finally { transferring = false; element("transfer-progress").hidden = true; }
 }
 musicButton.addEventListener("click", () => void run(() => install("music")));
+removeMusicButton.addEventListener("click", () => {
+  if (!serial || busy || room?.active || !musicAssets?.removal) return;
+  if (confirm("Remove Pocket Puzzle’s music? You can reinstall it later. Put your toy on Connection → Download → Download before continuing."))
+    void run(() => install("remove"));
+});
 sendButton.addEventListener("click", () => void run(() => install("game")));
 window.addEventListener("beforeunload", event => {
   if (transferring) { event.preventDefault(); event.returnValue = ""; }

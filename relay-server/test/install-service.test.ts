@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { crc32, createChunk, parseChunk, tcpCrypt, prepareDownload, sendDownload, UartChannel, streamMusic, validateMusicBundle, type Transport } from "@tama-breed-poc/tama-protocol";
+import { crc32, createChunk, parseChunk, tcpCrypt, prepareDownload, sendDownload, UartChannel, streamMusic, removeMusicBank, validateMusicBundle, type Transport } from "@tama-breed-poc/tama-protocol";
 import { GameInstallService } from "../../web-client/src/game-install-service";
 import { SerialBridge } from "../../web-client/src/serial-bridge";
 class Serial implements Transport {
@@ -127,6 +127,38 @@ describe('browser UART install service', () => {
     const service = new GameInstallService(new URL('https://example.test/games/'), vi.fn(async () => new Response(new Uint8Array(4))) as typeof fetch);
     await expect(service.sendGame(serial, { file: 'test.bin', sha256: '0'.repeat(64), bytes: 4 }, () => {})).rejects.toThrow('verification failed');
     expect(serial.writes).toHaveLength(0); expect(serial.reads).toBe(0);
+  });
+  it('removes only after guarded readiness, counts verified sectors and requires final empty-bank verification', async () => {
+    const serial = new Serial(), channel = new UartChannel(serial); const crc = 0x12345678;
+    serial.push(response(0xfffffffc, 3));
+    serial.onWrite = command => {
+      expect(new TextDecoder().decode(command.subarray(0, 8))).toBe('PPCLR001');
+      const v = new DataView(command.buffer, command.byteOffset, command.byteLength);
+      expect(v.getUint32(8, true)).toBe(crc); expect(v.getUint32(12, true)).toBe(crc32(command.subarray(0, 12)));
+      serial.push(response(0xfffffffe, 3));
+      for (let i = 0; i < 256; i++) serial.push(response(i, i < 248 ? 1 : 2));
+      serial.push(response(0xfffffffd, 3));
+    };
+    try { expect(await removeMusicBank(channel, crc, () => {})).toEqual({ completed: 256, total: 256, written: 248, matched: 8 }); }
+    finally { channel.release(); }
+    expect(serial.writes).toHaveLength(1);
+  });
+  it.each([[3, 3], [2, 3], [1, 0]])('refuses removal readiness detail %s/status %s before sending confirmation', async (detail, status) => {
+    const serial = new Serial(), channel = new UartChannel(serial);
+    serial.push(response(0xfffffffc, detail, status));
+    try { await expect(removeMusicBank(channel, 123, () => {})).rejects.toThrow(); }
+    finally { channel.release(); }
+    expect(serial.writes).toHaveLength(0);
+  });
+  it('does not report success when final removal verification fails', async () => {
+    const serial = new Serial(), channel = new UartChannel(serial); serial.push(response(0xfffffffc, 3));
+    serial.onWrite = () => {
+      serial.push(response(0xfffffffe, 3));
+      for (let i = 0; i < 256; i++) serial.push(response(i, 2));
+      serial.push(response(0xfffffffd, 0, 5));
+    };
+    try { await expect(removeMusicBank(channel, 123, () => {})).rejects.toThrow('complete empty-space verification'); }
+    finally { channel.release(); }
   });
   it('hands the pending serial read to the game bridge without opening another reader', async () => {
     class Socket extends EventTarget { static OPEN = 1; readyState = 1; sent: Uint8Array[] = []; send(b: Uint8Array) { this.sent.push(b); } }

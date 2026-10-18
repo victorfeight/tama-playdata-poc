@@ -50,8 +50,10 @@ Native run: `TamaSuite-validation/browser-uart-20261017/native-3/`.
 ## Reproduce
 
 Build the protocol package, then build/package the web app using the existing
-receipt verifier with `--full-web --music-stream=SDK_MUSIC_DIRECTORY` and both
-game build receipts. For Chromium, run:
+receipt verifier with `--full-web --music-stream=SDK_MUSIC_DIRECTORY`
+and `--music-remover=SDK_REMOVER_DIRECTORY` plus both
+game build receipts. The guarded removal extension and its separate qualification
+are recorded in [the removal release](releases/2026-10-17-music-removal.md). For Chromium, run:
 
 ```sh
 node scripts/test-browser-installer.mjs http://localhost:PORT/games/?game=pocket-puzzle OUTPUT

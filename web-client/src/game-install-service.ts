@@ -1,7 +1,8 @@
-import { UartChannel, prepareDownload, sendDownload, streamMusic, validateMusicBundle, type Transport } from "@tama-breed-poc/tama-protocol";
+import { UartChannel, prepareDownload, sendDownload, streamMusic, removeMusicBank, validateMusicBundle, type Transport } from "@tama-breed-poc/tama-protocol";
 
 export interface InstallAsset { file: string; sha256: string; bytes: number }
-export interface MusicAssets { helper: InstallAsset; bundle: InstallAsset; profile: string; sectors: number }
+export interface MusicRemovalAssets { helper: InstallAsset; bankCrc32: number; sectors: 256 }
+export interface MusicAssets { helper: InstallAsset; bundle: InstallAsset; profile: string; sectors: number; removal?: MusicRemovalAssets }
 export interface InstallProgress { phase: string; done?: number; total?: number }
 
 export function isInstallAsset(value: unknown): value is InstallAsset {
@@ -14,7 +15,14 @@ export function isMusicAssets(value: unknown): value is MusicAssets {
   if (!value || typeof value !== "object") return false;
   const m = value as MusicAssets;
   return isInstallAsset(m.helper) && m.helper.bytes <= 65536 && isInstallAsset(m.bundle) &&
-    m.profile === "puzzle-music" && Number.isInteger(m.sectors) && m.sectors > 0 && m.sectors <= 256;
+    m.profile === "puzzle-music" && Number.isInteger(m.sectors) && m.sectors > 0 && m.sectors <= 256 &&
+    (m.removal === undefined || isMusicRemovalAssets(m.removal));
+}
+export function isMusicRemovalAssets(value: unknown): value is MusicRemovalAssets {
+  if (!value || typeof value !== "object") return false;
+  const m = value as MusicRemovalAssets;
+  return isInstallAsset(m.helper) && m.helper.bytes === 65532 && m.sectors === 256 &&
+    Number.isInteger(m.bankCrc32) && m.bankCrc32 >= 0 && m.bankCrc32 <= 0xffffffff;
 }
 
 /** Browser orchestration only; shared protocol owns every UART transaction.
@@ -53,6 +61,23 @@ export class GameInstallService {
           done: value.completed, total: value.total
         }));
         return { written: result.written, matched: result.matched };
+      } finally { channel.release(); }
+    });
+  }
+
+  async removeMusic(transport: Transport, assets: MusicRemovalAssets, progress: (p: InstallProgress) => void): Promise<{ written: number; matched: number }> {
+    return this.exclusive(async () => {
+      if (!isMusicRemovalAssets(assets)) throw new Error("Invalid music removal package. Refresh before retrying.");
+      progress({ phase: "Checking music remover download…" });
+      const prepared = await prepareDownload(await this.load(assets.helper));
+      const channel = new UartChannel(transport);
+      try {
+        await sendDownload(channel, prepared, (done, total) => progress({ phase: "Sending music remover…", done, total }));
+        progress({ phase: "Checking firmware and music ownership…" });
+        return await removeMusicBank(channel, assets.bankCrc32, value => progress({
+          phase: value.completed === value.total ? "Verifying empty music space…" : "Removing music…",
+          done: value.completed, total: value.total
+        }));
       } finally { channel.release(); }
     });
   }
