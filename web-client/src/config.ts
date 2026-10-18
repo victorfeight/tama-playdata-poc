@@ -3,5 +3,5 @@ export interface AppConfig {
 }
 
 export const config: AppConfig = {
-  relayUrl: import.meta.env.VITE_RELAY_URL ?? "http://localhost:3001"
+  relayUrl: import.meta.env.VITE_RELAY_URL ?? (import.meta.env.DEV ? "http://localhost:3001" : location.origin)
 };

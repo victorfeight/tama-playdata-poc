@@ -44,3 +44,10 @@ Physical removal qualification remains pending. Native readback and simulated
 browser tests do not establish all-device USB behavior or speaker sound quality.
 Three-source-voice listening exports live in the SDK; no production arrangement
 change is included. This is a static web release; **no relay restart** required.
+
+The final deployment check caught Playdate's production fallback pointing at
+localhost when `VITE_RELAY_URL` was omitted. Production now defaults to the page's
+own origin (as Games already does); local Vite development keeps port 3001 and
+an explicit environment URL still overrides both. The earlier Playdate entry
+was restored while preparing the corrected static build. Verify actual lobby
+requests on both public routes, not just mocked UART/room tests.
